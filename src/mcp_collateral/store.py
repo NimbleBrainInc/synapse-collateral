@@ -1,6 +1,6 @@
 """Filesystem-backed storage — v3 layout.
 
-Storage tree under ~/.collateral/:
+Storage tree under the data directory:
   components.typ              reusable Typst components
   voice.md                    brand voice document
   assets/                     user-uploaded images and files
@@ -8,11 +8,15 @@ Storage tree under ~/.collateral/:
   templates/<id>/             user templates (meta.json + template.typ)
   documents/<id>/             saved documents (meta.json + source.typ)
   _compile/                   transient compilation artifacts
+
+Directory resolution: UPJACK_ROOT env var (set by NimbleBrain runtime),
+falling back to ~/.collateral for standalone use.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 from datetime import UTC, datetime
@@ -25,7 +29,14 @@ from .models import DocumentInfo, DocumentMeta
 # Directory constants
 # ---------------------------------------------------------------------------
 
-BASE_DIR = Path.home() / ".collateral"
+
+def _resolve_base_dir() -> Path:
+    """Resolve the data directory: UPJACK_ROOT env var or ~/.collateral."""
+    root = os.environ.get("UPJACK_ROOT")
+    return Path(root) if root else Path.home() / ".collateral"
+
+
+BASE_DIR = _resolve_base_dir()
 ASSETS_DIR = BASE_DIR / "assets"
 FONTS_DIR = BASE_DIR / "fonts"
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -40,7 +51,12 @@ _SAFE_FILENAME_RE = re.compile(r"^[a-zA-Z0-9._-]+$")
 
 
 def _migrate_legacy_dir() -> None:
-    """One-time migration from ~/.typst-pdf to ~/.collateral."""
+    """One-time migration from ~/.typst-pdf to ~/.collateral.
+
+    Only runs when using the standalone default (~/.collateral).
+    """
+    if os.environ.get("UPJACK_ROOT"):
+        return
     legacy = Path.home() / ".typst-pdf"
     if legacy.exists() and not BASE_DIR.exists():
         legacy.rename(BASE_DIR)

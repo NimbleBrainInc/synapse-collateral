@@ -3,9 +3,9 @@
 Compiles Typst source to PDF or PNG. Knows nothing about templates,
 starters, or workspaces -- just takes source and produces bytes.
 
-The compiler uses --root pointing to BASE_DIR (~/.collateral/) so that
-absolute Typst paths like /assets/ resolve correctly. If components.typ
-exists in BASE_DIR, it is copied to COMPILE_DIR so that
+The compiler uses --root pointing to BASE_DIR so that absolute Typst
+paths like /assets/ resolve correctly. If components.typ exists in
+BASE_DIR, it is copied to COMPILE_DIR so that
 `#import "/components.typ": *` works from the compile directory.
 
 Source is written to COMPILE_DIR (_compile/ inside BASE_DIR) and

@@ -36,10 +36,12 @@ def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Workspace:
 
     # Reset template seeding flag so each test gets fresh seeds
     import mcp_collateral.templates as tmod
+
     monkeypatch.setattr(tmod, "_seeded", False)
 
     # Create dirs and seed templates
     from mcp_collateral import store
+
     store._ensure_dirs()
     store.seed_templates()
 
@@ -94,7 +96,6 @@ class TestTemplateContracts:
             assert isinstance(t.id, str)
             assert isinstance(t.name, str)
             assert isinstance(t.page_count, int)
-            assert isinstance(t.variables, list)
 
     def test_create_template_returns_template_info(self, workspace: Workspace) -> None:
         result = workspace.create_template("test-tpl", "Test", "A test", "// source")
@@ -147,7 +148,7 @@ class TestDocumentContracts:
         result = workspace.create_document("Test", template_id=templates[0].id)
         assert isinstance(result, WorkspaceState)
         assert result.template_id == templates[0].id
-        assert result.source != ""
+        assert result.document_id is not None
 
     def test_list_documents_returns_list_of_document_info(self, workspace: Workspace) -> None:
         result = workspace.list_documents()
@@ -176,23 +177,17 @@ class TestDocumentContracts:
 
 
 class TestEditingContracts:
-    """set_content and set_source return WorkspaceState."""
-
-    def test_set_content_returns_workspace_state(self, workspace: Workspace) -> None:
-        templates = workspace.list_templates()
-        if not templates:
-            pytest.skip("No seed templates")
-        workspace.create_document("Test", template_id=templates[0].id)
-        # Use a generic field update
-        defaults = {v.name: v.default for v in templates[0].variables}
-        if defaults:
-            first_key = next(iter(defaults))
-            result = workspace.set_content({first_key: "Updated"})
-            assert isinstance(result, WorkspaceState)
+    """set_source and patch_source return WorkspaceState."""
 
     def test_set_source_returns_workspace_state(self, workspace: Workspace) -> None:
         workspace.create_document("Test")
         result = workspace.set_source("#set text(size: 12pt)\n= Hello")
+        assert isinstance(result, WorkspaceState)
+
+    def test_patch_source_returns_workspace_state(self, workspace: Workspace) -> None:
+        workspace.create_document("Test")
+        workspace.set_source("#set text(size: 12pt)\n= Hello")
+        result = workspace.patch_source("Hello", "World")
         assert isinstance(result, WorkspaceState)
 
 
@@ -345,20 +340,6 @@ class TestRenderingContracts:
 class TestAutoSaveContract:
     """Edits auto-save and write output.pdf to disk."""
 
-    def test_set_content_writes_output_pdf(self, workspace: Workspace, tmp_path: Path) -> None:
-        templates = workspace.list_templates()
-        if not templates:
-            pytest.skip("No seed templates")
-        tid = templates[0].id
-        workspace.create_document("Test", template_id=tid)
-        defaults = {v.name: v.default for v in templates[0].variables}
-        if defaults:
-            first_key = next(iter(defaults))
-            workspace.set_content({first_key: "Auto-saved"})
-            pdf_path = tmp_path / "documents" / "test" / "output.pdf"
-            assert pdf_path.exists()
-            assert pdf_path.stat().st_size > 0
-
     def test_set_source_writes_output_pdf(self, workspace: Workspace, tmp_path: Path) -> None:
         workspace.create_document("Test")
         workspace.set_source("#set text(size: 12pt)\n= Saved")
@@ -366,15 +347,18 @@ class TestAutoSaveContract:
         assert pdf_path.exists()
         assert pdf_path.stat().st_size > 0
 
-    def test_set_content_auto_saves_source(self, workspace: Workspace, tmp_path: Path) -> None:
-        templates = workspace.list_templates()
-        if not templates:
-            pytest.skip("No seed templates")
-        tid = templates[0].id
-        workspace.create_document("Test", template_id=tid)
-        defaults = {v.name: v.default for v in templates[0].variables}
-        if defaults:
-            first_key = next(iter(defaults))
-            workspace.set_content({first_key: "Saved"})
-            source_path = tmp_path / "documents" / "test" / "source.typ"
-            assert source_path.exists()
+    def test_patch_source_writes_output_pdf(self, workspace: Workspace, tmp_path: Path) -> None:
+        workspace.create_document("Test")
+        workspace.set_source("#set text(size: 12pt)\n= Hello")
+        workspace.patch_source("Hello", "Patched")
+        pdf_path = tmp_path / "documents" / "test" / "output.pdf"
+        assert pdf_path.exists()
+        assert pdf_path.stat().st_size > 0
+
+    def test_patch_source_auto_saves_source(self, workspace: Workspace, tmp_path: Path) -> None:
+        workspace.create_document("Test")
+        workspace.set_source("#set text(size: 12pt)\n= Hello")
+        workspace.patch_source("Hello", "Saved")
+        source_path = tmp_path / "documents" / "test" / "source.typ"
+        assert source_path.exists()
+        assert "Saved" in source_path.read_text()
