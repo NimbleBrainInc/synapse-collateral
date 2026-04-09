@@ -1,0 +1,57 @@
+{
+  "$schema": "https://schemas.nimblebrain.ai/v1/nimblebrain-server.schema.json",
+  "name": "ai.nimblebrain/synapse-collateral",
+  "description": "Collateral Studio — Typst-powered document generation with brand-aware templates, live preview, and conversational iteration",
+  "version": "0.1.0",
+  "title": "Collateral Studio Synapse App",
+  "repository": {
+    "url": "https://github.com/NimbleBrainInc/synapse-collateral",
+    "source": "https://github.com/NimbleBrainInc/synapse-collateral"
+  },
+  "_meta": {
+    "ai.nimblebrain/v1": {
+      "runtime": "python:3.13",
+      "capabilities": {
+        "tools": true,
+        "resources": true,
+        "prompts": false
+      },
+      "display": {
+        "category": "custom",
+        "tags": [
+          "synapse",
+          "typst",
+          "pdf",
+          "collateral",
+          "documents",
+          "ui"
+        ]
+      },
+      "deployment": {
+        "protocol": "http",
+        "port": 8000,
+        "mcpPath": "/mcp"
+      },
+      "container": {
+        "healthCheck": {
+          "path": "/health",
+          "port": 8000
+        }
+      },
+      "resources": {
+        "limits": {
+          "memory": "1Gi",
+          "cpu": "1000m"
+        },
+        "requests": {
+          "memory": "512Mi",
+          "cpu": "500m"
+        }
+      },
+      "scaling": {
+        "minReplicas": 1,
+        "maxReplicas": 3
+      }
+    }
+  }
+}

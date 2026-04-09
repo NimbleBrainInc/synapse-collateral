@@ -1,0 +1,106 @@
+{
+  "manifest_version": "0.4",
+  "name": "@nimblebraininc/synapse-collateral",
+  "version": "0.1.0",
+  "description": "Collateral Studio — Typst-powered document generation with brand-aware templates, live preview, and conversational iteration",
+  "author": {
+    "name": "NimbleBrain Inc",
+    "email": "hello@nimblebrain.ai"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NimbleBrainInc/synapse-collateral"
+  },
+  "server": {
+    "type": "python",
+    "entry_point": "mcp_collateral.server",
+    "mcp_config": {
+      "command": "python",
+      "args": [
+        "-m",
+        "mcp_collateral.server"
+      ]
+    }
+  },
+  "tools": [
+    {
+      "name": "list_starters",
+      "description": "List available starter templates with variable schemas"
+    },
+    {
+      "name": "create_document",
+      "description": "Create a new document, optionally from a starter"
+    },
+    {
+      "name": "list_documents",
+      "description": "List saved documents"
+    },
+    {
+      "name": "open_document",
+      "description": "Load a saved document into the workspace"
+    },
+    {
+      "name": "save_document",
+      "description": "Persist the current document to filesystem"
+    },
+    {
+      "name": "get_workspace",
+      "description": "Get full workspace: source, brand, sections, metadata"
+    },
+    {
+      "name": "set_content",
+      "description": "Update template variable fields"
+    },
+    {
+      "name": "set_source",
+      "description": "Replace the full Typst source"
+    },
+    {
+      "name": "configure_brand",
+      "description": "Configure brand: preset, colors, logo"
+    },
+    {
+      "name": "list_brand_presets",
+      "description": "List built-in brand presets"
+    },
+    {
+      "name": "preview",
+      "description": "Render document to PNG preview (cached)"
+    },
+    {
+      "name": "export_pdf",
+      "description": "Export document as final PDF (cached)"
+    },
+    {
+      "name": "compile_typst",
+      "description": "Compile raw Typst source to PDF"
+    }
+  ],
+  "_meta": {
+    "org.mpaktrust": {
+      "mtf_version": "0.1",
+      "permissions": {
+        "filesystem": "write",
+        "network": "none",
+        "environment": "read",
+        "subprocess": "write",
+        "native": "none"
+      }
+    },
+    "ai.nimblebrain/host": {
+      "host_version": "1.0",
+      "name": "Collateral Studio",
+      "icon": "file-text",
+      "category": "custom",
+      "placements": [
+        {
+          "slot": "sidebar.apps",
+          "resourceUri": "ui://collateral/main",
+          "route": "@nimblebraininc/synapse-collateral",
+          "label": "Collateral",
+          "icon": "file-text"
+        }
+      ]
+    }
+  }
+}
