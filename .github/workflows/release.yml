@@ -24,6 +24,9 @@ jobs:
             runner: macos-latest
     runs-on: ${{ matrix.runner }}
 
+    env:
+      TYPST_VERSION: "0.14.2"
+
     steps:
       - uses: actions/checkout@v4
 
@@ -31,6 +34,20 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+
+      - name: Download Typst binary
+        run: |
+          mkdir -p bin
+          if [ "${{ matrix.os }}" = "linux" ] && [ "${{ matrix.arch }}" = "amd64" ]; then
+            TYPST_TARGET="x86_64-unknown-linux-musl"
+          elif [ "${{ matrix.os }}" = "linux" ] && [ "${{ matrix.arch }}" = "arm64" ]; then
+            TYPST_TARGET="aarch64-unknown-linux-musl"
+          elif [ "${{ matrix.os }}" = "darwin" ] && [ "${{ matrix.arch }}" = "arm64" ]; then
+            TYPST_TARGET="aarch64-apple-darwin"
+          fi
+          curl -sSL "https://github.com/typst/typst/releases/download/v${TYPST_VERSION}/typst-${TYPST_TARGET}.tar.xz" | tar -xJ --strip-components=1 -C bin
+          chmod +x bin/typst
+          bin/typst --version
 
       - name: Build UI
         run: cd ui && npm ci && npm run build

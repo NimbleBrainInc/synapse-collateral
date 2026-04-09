@@ -64,3 +64,4 @@ ui/node_modules/
 
 # Scanner reports
 security-report.json
+bin/
