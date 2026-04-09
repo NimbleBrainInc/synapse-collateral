@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import sys
 from importlib.resources import files
+from pathlib import Path
 from typing import Any
 
 from fastmcp import FastMCP
@@ -22,8 +23,10 @@ from .models import (
     TemplateInfo,
     WorkspaceState,
 )
-from .ui import load_ui
 from .workspace import Workspace
+
+_PROJECT_ROOT = Path(str(files("mcp_collateral"))).parent.parent
+_UI_HTML = _PROJECT_ROOT / "ui" / "dist" / "index.html"
 
 SKILL_CONTENT = files("mcp_collateral").joinpath("SKILL.md").read_text()
 REFERENCE_CONTENT = files("mcp_collateral").joinpath("REFERENCE.md").read_text()
@@ -77,8 +80,10 @@ def collateral_reference() -> str:
 
 @mcp.resource("ui://collateral/main")
 def collateral_ui() -> str:
-    """The Collateral Studio app UI."""
-    return load_ui()
+    """The Collateral Studio app UI — rendered in the platform sidebar."""
+    if _UI_HTML.exists():
+        return _UI_HTML.read_text()
+    return "<html><body><p>UI not built. Run <code>cd ui && npm run build</code>.</p></body></html>"
 
 
 @mcp.resource("ui://collateral/preview.pdf", mime_type="application/pdf")
