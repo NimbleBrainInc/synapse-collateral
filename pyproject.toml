@@ -1,6 +1,6 @@
 [project]
 name = "mcp-collateral"
-version = "0.1.0"
+version = "0.2.0"
 description = "Collateral Studio — Typst-powered document generation"
 readme = "README.md"
 license = {text = "MIT"}
