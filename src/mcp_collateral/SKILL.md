@@ -78,6 +78,19 @@ patch_source(edits=[
 
 This is dramatically more efficient than calling `set_source` with the entire 500-line document rewritten. It also can't accidentally break content you didn't intend to change.
 
+### Whitespace matters — exact matching
+
+`patch_source` uses **exact string matching**. The `find` text must match the source byte-for-byte, including newlines and indentation.
+
+**Common mistake:** Collapsing multi-line text into a single line.
+
+Wrong: `find="text#linebreak()more text"` (newline + indentation collapsed)
+Right: `find="text#linebreak()\n        more text"` (preserves the actual whitespace)
+
+**Best practice:** Use shorter find strings that stay on a single line. Instead of matching a full multi-line paragraph, match just the unique phrase on one line.
+
+If unsure about exact whitespace, call `get_source()` first and copy the text exactly.
+
 ### Single edit
 
 For a single change, use the simple form:

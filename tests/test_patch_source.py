@@ -76,6 +76,42 @@ class TestPatchSource:
             workspace.patch_source("MISSING TEXT", "replacement")
 
 
+    def test_patch_not_found_includes_source_context(self, workspace: Workspace) -> None:
+        workspace.create_document("Test")
+        workspace.set_source("= Hello World\nSome text here.")
+        with pytest.raises(ValueError, match="Nearby source") as exc_info:
+            workspace.patch_source("MISSING TEXT", "replacement")
+        assert "Nearby source" in str(exc_info.value)
+
+    def test_batch_not_found_includes_source_context(self, workspace: Workspace) -> None:
+        workspace.create_document("Test")
+        workspace.set_source("= Title\nLine A\nLine B")
+        with pytest.raises(ValueError, match="Nearby source") as exc_info:
+            workspace.patch_source_batch(
+                [
+                    {"find": "Line A", "replace": "Line X"},
+                    {"find": "NONEXISTENT", "replace": "oops"},
+                ]
+            )
+        assert "Nearby source" in str(exc_info.value)
+
+    def test_source_context_shows_relevant_region(self, workspace: Workspace) -> None:
+        """For a typo near the end of a long document, context should show that region."""
+        workspace.create_document("Test")
+        # Build a long document: header filler + distinct ending
+        header = "= Document Title\n" + ("Lorem ipsum. " * 100) + "\n"
+        ending = "= Final Section\nThe quick brown fox jumps over the lazy dog."
+        workspace.set_source(header + ending)
+        # Try to patch with a typo in the ending text
+        with pytest.raises(ValueError, match="Nearby source") as exc_info:
+            workspace.patch_source("The quick brown fox jumps over the lazy dgo.", "fixed")
+        nearby = str(exc_info.value).split("Nearby source:\n", 1)[1]
+        # The nearby snippet should contain text from the ending, not the header
+        assert "Final Section" in nearby or "quick brown fox" in nearby
+        # And should NOT just be the beginning of the document
+        assert not nearby.startswith("= Document Title")
+
+
 class TestPatchSourceJsonCoercion:
     """Server-level JSON string coercion for the edits parameter."""
 
@@ -106,3 +142,48 @@ class TestPatchSourceJsonCoercion:
             edits = json.loads(edits)
         assert isinstance(edits, list)
         assert edits[0]["find"] == "old"
+
+
+class TestCompileRollback:
+    """Verify that failed compilation rolls back source changes."""
+
+    VALID_SOURCE = "= Hello World\nSome text here."
+    BROKEN_SOURCE = "#let broken = "
+
+    def test_batch_rollback_on_compile_failure(self, workspace: Workspace) -> None:
+        workspace.create_document("Test")
+        workspace.set_source(self.VALID_SOURCE)
+        with pytest.raises(RuntimeError):
+            workspace.patch_source_batch(
+                [
+                    {"find": "Hello World", "replace": "#let broken = "},
+                ]
+            )
+        assert workspace.source == self.VALID_SOURCE
+
+    def test_single_patch_rollback_on_compile_failure(self, workspace: Workspace) -> None:
+        workspace.create_document("Test")
+        workspace.set_source(self.VALID_SOURCE)
+        with pytest.raises(RuntimeError):
+            workspace.patch_source("Hello World", "#let broken = ")
+        assert workspace.source == self.VALID_SOURCE
+
+    def test_set_source_rollback_on_compile_failure(self, workspace: Workspace) -> None:
+        workspace.create_document("Test")
+        workspace.set_source(self.VALID_SOURCE)
+        with pytest.raises(RuntimeError):
+            workspace.set_source(self.BROKEN_SOURCE)
+        assert workspace.source == self.VALID_SOURCE
+
+    def test_source_usable_after_rollback(self, workspace: Workspace) -> None:
+        workspace.create_document("Test")
+        workspace.set_source(self.VALID_SOURCE)
+        # Attempt a bad edit that should be rolled back
+        with pytest.raises(RuntimeError):
+            workspace.patch_source("Some text here.", "#[unclosed")
+        # Source should still be the original
+        assert workspace.source == self.VALID_SOURCE
+        # A valid edit should succeed on the original source
+        result = workspace.patch_source("Some text here.", "Updated text.")
+        assert isinstance(result, WorkspaceState)
+        assert "Updated text." in workspace.source

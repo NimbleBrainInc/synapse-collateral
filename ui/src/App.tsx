@@ -56,6 +56,22 @@ interface ExportResult {
   size_bytes: number;
 }
 
+/**
+ * Extract base64 image data from MCP content blocks returned by preview tools.
+ * The server returns ImageContent blocks with audience:["user"] for the UI.
+ */
+function extractImagesFromContent(blocks: unknown[]): string[] {
+  return blocks
+    .filter(
+      (block): block is { type: "image"; data: string } =>
+        block != null &&
+        typeof block === "object" &&
+        (block as Record<string, unknown>).type === "image" &&
+        typeof (block as Record<string, unknown>).data === "string",
+    )
+    .map((block) => block.data);
+}
+
 // --- Tab type ---
 type Tab = "documents" | "templates";
 
@@ -78,8 +94,8 @@ function CollateralStudioUI() {
   const openDocument = useCallTool<WorkspaceState>("open_document");
   const saveDocument = useCallTool<DocumentInfo>("save_document");
   const saveAsTemplate = useCallTool<TemplateInfo>("save_as_template");
-  const previewTool = useCallTool<PreviewResult>("preview");
-  const previewTemplateTool = useCallTool<PreviewResult>("preview_template");
+  const previewTool = useCallTool("preview");
+  const previewTemplateTool = useCallTool("preview_template");
   const exportPdf = useCallTool<ExportResult>("export_pdf");
   const uploadAsset = useCallTool<{ filename: string }>("upload_asset");
   const listAssetsTool = useCallTool<string[]>("list_assets");
@@ -180,9 +196,9 @@ function CollateralStudioUI() {
     setPreviewLoading(true);
     setPreviewError("");
     try {
-      const result = await previewTool.call({ include_images: true });
-      const data = result.data as PreviewResult;
-      setPages((data.pages || []).filter((p) => p.image_base64).map((p) => p.image_base64!));
+      const result = await previewTool.call({});
+      const images = extractImagesFromContent(result.content ?? []);
+      setPages(images);
       setPageIndex(0);
     } catch (e) {
       setPreviewError(e instanceof Error ? e.message : "Preview failed");
@@ -209,9 +225,9 @@ function CollateralStudioUI() {
     setPreviewLoading(true);
     setPreviewError("");
     try {
-      const result = await previewTemplateTool.call({ template_id: id, include_images: true });
-      const data = result.data as PreviewResult;
-      setPages((data.pages || []).map((p) => p.image_base64));
+      const result = await previewTemplateTool.call({ template_id: id });
+      const images = extractImagesFromContent(result.content ?? []);
+      setPages(images);
       setPageIndex(0);
     } catch (e) {
       setPreviewError(e instanceof Error ? e.message : "Failed to preview template");

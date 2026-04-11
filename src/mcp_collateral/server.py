@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from fastmcp import FastMCP
+from mcp.types import Annotations, ImageContent, TextContent
 
 from . import templates as template_mod
 from .models import (
@@ -24,6 +25,8 @@ from .models import (
     WorkspaceState,
 )
 from .workspace import Workspace
+
+_USER_ONLY = Annotations(audience=["user"])
 
 _PROJECT_ROOT = Path(str(files("mcp_collateral"))).parent.parent
 _UI_HTML = _PROJECT_ROOT / "ui" / "dist" / "index.html"
@@ -489,42 +492,90 @@ async def install_font(
     return _ws.install_font(url=url, base64_data=base64_data, filename=filename)
 
 
+# --- Rendering helpers ---
+
+
+def _preview_result_to_content_blocks(
+    result: PreviewResult,
+) -> list[TextContent | ImageContent]:
+    """Convert a PreviewResult to MCP content blocks with audience annotations.
+
+    The text summary goes to both model and user. Each page image is
+    annotated as user-only so base64 data stays out of the LLM context.
+    """
+    blocks: list[TextContent | ImageContent] = [
+        TextContent(type="text", text=f"Preview rendered ({result.page_count} pages)"),
+    ]
+    for page in result.pages:
+        if page.image_base64:
+            blocks.append(
+                ImageContent(
+                    type="image",
+                    data=page.image_base64,
+                    mimeType="image/png",
+                    annotations=_USER_ONLY,
+                ),
+            )
+    return blocks
+
+
 # --- 25-27. Rendering ---
 
 
 @mcp.tool()
-async def preview(page: int | None = None, include_images: bool = True) -> PreviewResult:
+async def preview(page: int | None = None) -> list[TextContent | ImageContent]:
     """Render the current document to PNG preview images.
+
+    Returns a text summary (for the model) and image blocks (for the user).
 
     Args:
         page: Optional page number (1-based) for single-page render.
-        include_images: Include base64 image data (default true).
     """
-    return _ws.preview(page=page, include_images=include_images)
+    result = _ws.preview(page=page, include_images=True)
+    return _preview_result_to_content_blocks(result)
 
 
 @mcp.tool()
-async def preview_template(template_id: str, include_images: bool = True) -> PreviewResult:
+async def preview_template(template_id: str) -> list[TextContent | ImageContent]:
     """Preview a template without creating a document.
 
     Compiles and renders the template source directly. Does not modify
-    the workspace or create any files on disk.
+    the workspace or create any files on disk. Returns a text summary
+    (for the model) and image blocks (for the user).
 
     Args:
         template_id: Template identifier (e.g., "proposal", "lead-magnet").
-        include_images: Include base64 image data (default true).
     """
-    return _ws.preview_template(template_id, include_images=include_images)
+    result = _ws.preview_template(template_id, include_images=True)
+    return _preview_result_to_content_blocks(result)
 
 
 @mcp.tool()
-async def export_pdf(include_data: bool = False) -> ExportResult:
+async def export_pdf(include_data: bool = False) -> list[TextContent | ImageContent]:
     """Export the current document as a final PDF. Cached if unchanged.
+
+    Returns a text summary (for the model). When include_data is true,
+    also returns the base64 PDF as user-only content.
 
     Args:
         include_data: Include base64 PDF data in the response (for download).
     """
-    return _ws.export_pdf(include_data=include_data)
+    result = _ws.export_pdf(include_data=include_data)
+    blocks: list[TextContent | ImageContent] = [
+        TextContent(
+            type="text",
+            text=f"Exported {result.filename} ({result.page_count} pages, {result.size_bytes} bytes)",
+        ),
+    ]
+    if result.pdf_base64:
+        blocks.append(
+            TextContent(
+                type="text",
+                text=result.pdf_base64,
+                annotations=_USER_ONLY,
+            ),
+        )
+    return blocks
 
 
 @mcp.tool()

@@ -193,21 +193,52 @@ class Workspace:
 
     def set_source(self, source: str) -> WorkspaceState:
         """Replace the Typst source, compile, and auto-save."""
+        original = self.source
         self.source = source
         self._invalidate()
-        self._verify_compile()
-        self._auto_save()
+        try:
+            self._verify_compile()
+            self._auto_save()
+        except Exception:
+            self.source = original
+            self._invalidate()
+            raise
         return self.get_state()
+
+    def _find_nearby(self, needle: str, radius: int = 200) -> str:
+        """Return a snippet of source near where *needle* was likely intended.
+
+        Tries progressively shorter prefixes of the first line of *needle*
+        to find an approximate match, then returns *radius* chars of context
+        around that position.  Falls back to the first *radius* chars.
+        """
+        first_line = needle.split("\n", 1)[0][:60]
+        for length in range(len(first_line), 9, -5):
+            prefix = first_line[:length]
+            pos = self.source.find(prefix)
+            if pos != -1:
+                start = max(0, pos - radius // 2)
+                end = min(len(self.source), pos + radius // 2)
+                return self.source[start:end]
+        # Fallback: beginning of source
+        return self.source[:radius]
 
     def patch_source(self, find: str, replace: str) -> WorkspaceState:
         """Find and replace in the source. Auto-compiles and auto-saves."""
         if find not in self.source:
-            msg = f"Text not found in source: {find[:100]}..."
+            nearby = self._find_nearby(find)
+            msg = f"Text not found in source: {find[:100]}...\nNearby source:\n{nearby}"
             raise ValueError(msg)
+        original = self.source
         self.source = self.source.replace(find, replace, 1)  # replace first occurrence only
         self._invalidate()
-        self._verify_compile()
-        self._auto_save()
+        try:
+            self._verify_compile()
+            self._auto_save()
+        except Exception:
+            self.source = original
+            self._invalidate()
+            raise
         return self.get_state()
 
     def patch_source_batch(self, edits: list[dict[str, str]]) -> WorkspaceState:
@@ -226,12 +257,18 @@ class Workspace:
                 self.source = original
                 raise ValueError(f"Edit {i}: 'find' must be a non-empty string")
             if find not in self.source:
+                nearby = self._find_nearby(find)
                 self.source = original
-                raise ValueError(f"Edit {i}: text not found in source: {find[:100]}...")
+                raise ValueError(f"Edit {i}: text not found in source: {find[:100]}...\nNearby source:\n{nearby}")
             self.source = self.source.replace(find, replace, 1)
         self._invalidate()
-        self._verify_compile()
-        self._auto_save()
+        try:
+            self._verify_compile()
+            self._auto_save()
+        except Exception:
+            self.source = original
+            self._invalidate()
+            raise
         return self.get_state()
 
     # --- Content Import ---
