@@ -97,7 +97,7 @@ def collateral_settings_ui() -> str:
     """Collateral configuration panel — brand, voice, assets."""
     if _SETTINGS_HTML.exists():
         return _SETTINGS_HTML.read_text()
-    return _INLINE_SETTINGS_HTML
+    return _INLINE_SETTINGS_HTML  # defined at end of file to keep tools readable
 
 
 @mcp.resource("ui://collateral/preview.pdf", mime_type="application/pdf")
@@ -599,7 +599,9 @@ async def compile_typst(source: str) -> ExportResult:
     return _ws.compile_typst(source)
 
 
-# ASGI entrypoint for HTTP deployment
+# ---------------------------------------------------------------------------
+# ASGI / Stdio entrypoints
+# ---------------------------------------------------------------------------
 _INLINE_SETTINGS_HTML = """\
 <!DOCTYPE html>
 <html lang="en">
@@ -672,10 +674,10 @@ _INLINE_SETTINGS_HTML = """\
     const root = document.getElementById("root");
     try {
       const [themeResult, voiceResult, componentsResult, assetsResult] = await Promise.all([
-        callTool("synapse-collateral__get_theme"),
-        callTool("synapse-collateral__get_voice"),
-        callTool("synapse-collateral__get_components"),
-        callTool("synapse-collateral__list_assets"),
+        callTool("get_theme"),
+        callTool("get_voice"),
+        callTool("get_components"),
+        callTool("list_assets"),
       ]);
       const theme = parseResult(themeResult) || {};
       const voice = parseResult(voiceResult) || "";
@@ -761,7 +763,7 @@ _INLINE_SETTINGS_HTML = """\
       document.getElementById("save-theme").addEventListener("click", async () => {
         const status = document.getElementById("theme-status");
         try {
-          await callTool("synapse-collateral__set_theme", {
+          await callTool("set_theme", {
             updates: {
               colors: { primary: document.getElementById("color-primary-text").value, accent: document.getElementById("color-accent-text").value },
               fonts: { heading: document.getElementById("font-heading").value, body: document.getElementById("font-body").value },
@@ -775,7 +777,7 @@ _INLINE_SETTINGS_HTML = """\
       document.getElementById("save-voice").addEventListener("click", async () => {
         const status = document.getElementById("voice-status");
         try {
-          await callTool("synapse-collateral__set_voice", { content: document.getElementById("voice-text").value });
+          await callTool("set_voice", { content: document.getElementById("voice-text").value });
           status.className = "status ok"; status.textContent = "Voice saved.";
         } catch (e) { status.className = "status err"; status.textContent = e.message; }
       });
@@ -784,7 +786,7 @@ _INLINE_SETTINGS_HTML = """\
       document.getElementById("save-components").addEventListener("click", async () => {
         const status = document.getElementById("components-status");
         try {
-          await callTool("synapse-collateral__set_components", { source: document.getElementById("components-text").value });
+          await callTool("set_components", { source: document.getElementById("components-text").value });
           status.className = "status ok"; status.textContent = "Components saved.";
         } catch (e) { status.className = "status err"; status.textContent = e.message; }
       });
@@ -797,7 +799,7 @@ _INLINE_SETTINGS_HTML = """\
         if (!confirm("Delete " + filename + "?")) return;
         const status = document.getElementById("assets-status");
         try {
-          await callTool("synapse-collateral__delete_asset", { filename });
+          await callTool("delete_asset", { filename });
           btn.closest(".asset-tag").remove();
           status.className = "status ok"; status.textContent = filename + " deleted.";
         } catch (e) { status.className = "status err"; status.textContent = e.message; }
@@ -812,7 +814,7 @@ _INLINE_SETTINGS_HTML = """\
         reader.onload = async () => {
           const base64 = reader.result.split(",")[1];
           try {
-            await callTool("synapse-collateral__upload_asset", { base64_data: base64, filename: file.name });
+            await callTool("upload_asset", { base64_data: base64, filename: file.name });
             const list = document.getElementById("assets-list");
             list.insertAdjacentHTML("beforeend", '<span class="asset-tag">' + file.name + '<button data-asset="' + file.name + '">&times;</button></span>');
             status.className = "status ok"; status.textContent = file.name + " uploaded.";

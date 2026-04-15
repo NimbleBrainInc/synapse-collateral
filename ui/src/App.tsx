@@ -192,6 +192,8 @@ function CollateralStudioUI() {
     } catch { /* non-critical */ }
   }, [getVoiceTool, getComponentsTool, listAssetsTool]);
 
+  // Refresh the current document's preview (workspace-based).
+  // Only used after openDocument — template previews use preview_template directly.
   const refreshPreview = useCallback(async () => {
     setPreviewLoading(true);
     setPreviewError("");
@@ -235,12 +237,14 @@ function CollateralStudioUI() {
     setPreviewLoading(false);
   }, [previewTemplateTool]);
 
-  // Auto-refresh when agent calls tools
+  // Auto-refresh when the agent calls tools (data-changed from host).
+  // Only refresh the document preview — template previews are static snapshots
+  // that don't change in response to agent activity.
   useDataSync(() => {
     if (tab === "templates") loadTemplates();
-    if (tab === "documents") loadDocs();
-    if (hasSelection) {
-      refreshPreview();
+    if (tab === "documents") {
+      loadDocs();
+      if (selectedDocument) refreshPreview();
     }
   });
 
