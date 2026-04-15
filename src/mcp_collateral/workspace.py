@@ -259,7 +259,9 @@ class Workspace:
             if find not in self.source:
                 nearby = self._find_nearby(find)
                 self.source = original
-                raise ValueError(f"Edit {i}: text not found in source: {find[:100]}...\nNearby source:\n{nearby}")
+                raise ValueError(
+                    f"Edit {i}: text not found in source: {find[:100]}...\nNearby source:\n{nearby}"
+                )
             self.source = self.source.replace(find, replace, 1)
         self._invalidate()
         try:

@@ -89,6 +89,17 @@ def collateral_ui() -> str:
     return "<html><body><p>UI not built. Run <code>cd ui && npm run build</code>.</p></body></html>"
 
 
+_SETTINGS_HTML = _PROJECT_ROOT / "ui" / "settings.html"
+
+
+@mcp.resource("ui://collateral/settings")
+def collateral_settings_ui() -> str:
+    """Collateral configuration panel — brand, voice, assets."""
+    if _SETTINGS_HTML.exists():
+        return _SETTINGS_HTML.read_text()
+    return _INLINE_SETTINGS_HTML
+
+
 @mcp.resource("ui://collateral/preview.pdf", mime_type="application/pdf")
 def collateral_preview() -> bytes:
     """Current document's compiled PDF served from disk."""
@@ -589,6 +600,250 @@ async def compile_typst(source: str) -> ExportResult:
 
 
 # ASGI entrypoint for HTTP deployment
+_INLINE_SETTINGS_HTML = """\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Collateral Settings</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, sans-serif; padding: 0; color: #1a1a1a; background: transparent; font-size: 14px; line-height: 1.5; }
+  h2 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+  h3 { font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #555; text-transform: uppercase; letter-spacing: 0.5px; }
+  .section { margin-bottom: 24px; padding: 16px; border: 1px solid #e5e5e5; border-radius: 8px; background: #fff; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 12px; font-weight: 500; color: #666; margin-bottom: 4px; }
+  .field input, .field select { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; }
+  .field textarea { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; min-height: 100px; font-family: monospace; resize: vertical; }
+  .color-row { display: flex; gap: 8px; align-items: center; }
+  .color-row input[type=color] { width: 32px; height: 32px; padding: 0; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; }
+  .color-row input[type=text] { flex: 1; }
+  button { padding: 8px 16px; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; background: #2563eb; color: #fff; }
+  button:hover { background: #1d4ed8; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-secondary { background: #f3f4f6; color: #374151; }
+  .btn-secondary:hover { background: #e5e7eb; }
+  .assets-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .asset-tag { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; background: #f3f4f6; border-radius: 4px; font-size: 12px; }
+  .asset-tag button { padding: 0 4px; background: none; color: #999; font-size: 14px; }
+  .asset-tag button:hover { color: #ef4444; }
+  .status { font-size: 12px; margin-top: 8px; padding: 6px 10px; border-radius: 4px; }
+  .status.ok { background: #f0fdf4; color: #166534; }
+  .status.err { background: #fef2f2; color: #991b1b; }
+  .loading { color: #999; font-style: italic; }
+</style>
+</head>
+<body>
+<div id="root" class="loading">Loading configuration...</div>
+<script>
+(function() {
+  let _reqId = 0;
+  const _pending = {};
+
+  function callTool(name, args) {
+    return new Promise((resolve, reject) => {
+      const id = ++_reqId;
+      _pending[id] = { resolve, reject };
+      window.parent.postMessage({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args || {} } }, "*");
+    });
+  }
+
+  window.addEventListener("message", (e) => {
+    const msg = e.data;
+    if (!msg || !msg.jsonrpc) return;
+    if (msg.id && _pending[msg.id]) {
+      const { resolve, reject } = _pending[msg.id];
+      delete _pending[msg.id];
+      if (msg.error) reject(new Error(msg.error.message || "Tool call failed"));
+      else resolve(msg.result);
+    }
+  });
+
+  function parseResult(result) {
+    if (result && result.content && result.content[0] && result.content[0].text) {
+      try { return JSON.parse(result.content[0].text); } catch { return result.content[0].text; }
+    }
+    return result;
+  }
+
+  async function init() {
+    const root = document.getElementById("root");
+    try {
+      const [themeResult, voiceResult, componentsResult, assetsResult] = await Promise.all([
+        callTool("synapse-collateral__get_theme"),
+        callTool("synapse-collateral__get_voice"),
+        callTool("synapse-collateral__get_components"),
+        callTool("synapse-collateral__list_assets"),
+      ]);
+      const theme = parseResult(themeResult) || {};
+      const voice = parseResult(voiceResult) || "";
+      const components = parseResult(componentsResult) || "";
+      const assets = parseResult(assetsResult) || [];
+
+      const colors = theme.colors || {};
+      const fonts = theme.fonts || {};
+
+      root.innerHTML = `
+        <div class="section">
+          <h2>Theme</h2>
+          <h3>Colors</h3>
+          <div class="field">
+            <label>Primary</label>
+            <div class="color-row">
+              <input type="color" id="color-primary" value="${colors.primary || '#2563eb'}" />
+              <input type="text" id="color-primary-text" value="${colors.primary || '#2563eb'}" />
+            </div>
+          </div>
+          <div class="field">
+            <label>Accent</label>
+            <div class="color-row">
+              <input type="color" id="color-accent" value="${colors.accent || '#7c3aed'}" />
+              <input type="text" id="color-accent-text" value="${colors.accent || '#7c3aed'}" />
+            </div>
+          </div>
+          <h3 style="margin-top:12px">Fonts</h3>
+          <div class="field">
+            <label>Heading Font</label>
+            <input type="text" id="font-heading" value="${fonts.heading || ''}" placeholder="e.g. Inter, Helvetica" />
+          </div>
+          <div class="field">
+            <label>Body Font</label>
+            <input type="text" id="font-body" value="${fonts.body || ''}" placeholder="e.g. Georgia, serif" />
+          </div>
+          <button id="save-theme">Save Theme</button>
+          <div id="theme-status"></div>
+        </div>
+
+        <div class="section">
+          <h2>Brand Voice</h2>
+          <div class="field">
+            <label>Voice guidelines (Markdown)</label>
+            <textarea id="voice-text">${typeof voice === "string" ? voice : ""}</textarea>
+          </div>
+          <button id="save-voice">Save Voice</button>
+          <div id="voice-status"></div>
+        </div>
+
+        <div class="section">
+          <h2>Reusable Components</h2>
+          <div class="field">
+            <label>Typst component source</label>
+            <textarea id="components-text">${typeof components === "string" ? components : ""}</textarea>
+          </div>
+          <button id="save-components">Save Components</button>
+          <div id="components-status"></div>
+        </div>
+
+        <div class="section">
+          <h2>Assets</h2>
+          <div class="assets-list" id="assets-list">
+            ${(Array.isArray(assets) ? assets : []).map(a => '<span class="asset-tag">' + a + '<button data-asset="' + a + '">&times;</button></span>').join("")}
+          </div>
+          <div style="margin-top:12px">
+            <input type="file" id="upload-asset" accept="image/*,.pdf,.svg" />
+          </div>
+          <div id="assets-status"></div>
+        </div>
+      `;
+      root.className = "";
+
+      // Sync color pickers with text inputs
+      for (const key of ["primary", "accent"]) {
+        const picker = document.getElementById("color-" + key);
+        const text = document.getElementById("color-" + key + "-text");
+        picker.addEventListener("input", () => { text.value = picker.value; });
+        text.addEventListener("input", () => { picker.value = text.value; });
+      }
+
+      // Save theme
+      document.getElementById("save-theme").addEventListener("click", async () => {
+        const status = document.getElementById("theme-status");
+        try {
+          await callTool("synapse-collateral__set_theme", {
+            updates: {
+              colors: { primary: document.getElementById("color-primary-text").value, accent: document.getElementById("color-accent-text").value },
+              fonts: { heading: document.getElementById("font-heading").value, body: document.getElementById("font-body").value },
+            }
+          });
+          status.className = "status ok"; status.textContent = "Theme saved.";
+        } catch (e) { status.className = "status err"; status.textContent = e.message; }
+      });
+
+      // Save voice
+      document.getElementById("save-voice").addEventListener("click", async () => {
+        const status = document.getElementById("voice-status");
+        try {
+          await callTool("synapse-collateral__set_voice", { content: document.getElementById("voice-text").value });
+          status.className = "status ok"; status.textContent = "Voice saved.";
+        } catch (e) { status.className = "status err"; status.textContent = e.message; }
+      });
+
+      // Save components
+      document.getElementById("save-components").addEventListener("click", async () => {
+        const status = document.getElementById("components-status");
+        try {
+          await callTool("synapse-collateral__set_components", { source: document.getElementById("components-text").value });
+          status.className = "status ok"; status.textContent = "Components saved.";
+        } catch (e) { status.className = "status err"; status.textContent = e.message; }
+      });
+
+      // Delete asset
+      document.getElementById("assets-list").addEventListener("click", async (e) => {
+        const btn = e.target.closest("[data-asset]");
+        if (!btn) return;
+        const filename = btn.dataset.asset;
+        if (!confirm("Delete " + filename + "?")) return;
+        const status = document.getElementById("assets-status");
+        try {
+          await callTool("synapse-collateral__delete_asset", { filename });
+          btn.closest(".asset-tag").remove();
+          status.className = "status ok"; status.textContent = filename + " deleted.";
+        } catch (e) { status.className = "status err"; status.textContent = e.message; }
+      });
+
+      // Upload asset
+      document.getElementById("upload-asset").addEventListener("change", async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const status = document.getElementById("assets-status");
+        const reader = new FileReader();
+        reader.onload = async () => {
+          const base64 = reader.result.split(",")[1];
+          try {
+            await callTool("synapse-collateral__upload_asset", { base64_data: base64, filename: file.name });
+            const list = document.getElementById("assets-list");
+            list.insertAdjacentHTML("beforeend", '<span class="asset-tag">' + file.name + '<button data-asset="' + file.name + '">&times;</button></span>');
+            status.className = "status ok"; status.textContent = file.name + " uploaded.";
+          } catch (e) { status.className = "status err"; status.textContent = e.message; }
+        };
+        reader.readAsDataURL(file);
+      });
+
+    } catch (e) {
+      root.innerHTML = '<div class="status err">Failed to load settings: ' + e.message + '</div>';
+      root.className = "";
+    }
+  }
+
+  // Wait for bridge handshake, then init
+  window.addEventListener("message", function onInit(e) {
+    if (e.data && e.data.method === "ui/initialize") {
+      window.removeEventListener("message", onInit);
+      // Respond to handshake
+      window.parent.postMessage({ jsonrpc: "2.0", id: e.data.id, result: {} }, "*");
+      setTimeout(init, 100);
+    }
+  });
+  // Fallback: init after 500ms if no handshake
+  setTimeout(init, 500);
+})();
+</script>
+</body>
+</html>
+"""
+
 app = mcp.http_app()
 
 # Stdio entrypoint for mpak / Claude Desktop

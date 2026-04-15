@@ -1,7 +1,7 @@
 {
   "manifest_version": "0.4",
   "name": "@nimblebraininc/synapse-collateral",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Collateral Studio — Typst-powered document generation with brand-aware templates, live preview, and conversational iteration",
   "author": {
     "name": "NimbleBrain Inc",
@@ -99,6 +99,13 @@
           "route": "@nimblebraininc/synapse-collateral",
           "label": "Collateral",
           "icon": "file-text"
+        },
+        {
+          "slot": "settings",
+          "resourceUri": "ui://collateral/settings",
+          "label": "Collateral",
+          "icon": "file-text",
+          "priority": 100
         }
       ]
     }

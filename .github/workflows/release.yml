@@ -62,3 +62,4 @@ jobs:
       - uses: NimbleBrainInc/mcpb-pack@v2
         with:
           output: "{name}-{version}-${{ matrix.os }}-${{ matrix.arch }}.mcpb"
+          announce-required: "true"
