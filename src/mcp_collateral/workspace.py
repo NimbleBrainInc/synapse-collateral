@@ -10,7 +10,9 @@ from __future__ import annotations
 import base64
 import io
 import re
+import secrets
 import subprocess
+import time
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -28,6 +30,57 @@ from .models import (
     ThemeData,
     WorkspaceState,
 )
+
+# Rendered artifacts are written here so tools can return resource_link
+# references instead of inlining base64 bytes in tool results.
+_EXPORT_TTL_SECONDS = 24 * 60 * 60
+
+
+def _exports_dir() -> Path:
+    # Resolve lazily so tests that monkeypatch store.BASE_DIR work.
+    return store.BASE_DIR / "exports"
+
+
+def _cleanup_stale_exports() -> None:
+    try:
+        d = _exports_dir()
+        if not d.exists():
+            return
+        cutoff = time.time() - _EXPORT_TTL_SECONDS
+        for p in d.iterdir():
+            try:
+                if p.is_file() and p.stat().st_mtime < cutoff:
+                    p.unlink()
+            except OSError:
+                pass
+    except OSError:
+        pass
+
+
+def store_export(data: bytes, ext: str) -> tuple[str, Path]:
+    """Persist rendered bytes under a short-lived export id. Returns (id, path)."""
+    d = _exports_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    _cleanup_stale_exports()
+    export_id = "exp_" + secrets.token_hex(8)
+    path = d / f"{export_id}.{ext}"
+    path.write_bytes(data)
+    return export_id, path
+
+
+def load_export(export_id: str, ext: str) -> bytes | None:
+    """Load previously stored export bytes. Returns None if missing."""
+    path = _exports_dir() / f"{export_id}.{ext}"
+    if not path.exists():
+        return None
+    try:
+        return path.read_bytes()
+    except OSError:
+        return None
+
+
+# Module-level EXPORTS_DIR kept for backwards compat and test introspection.
+EXPORTS_DIR = store.BASE_DIR / "exports"
 
 # Default blank document source
 BLANK_SOURCE = """\
