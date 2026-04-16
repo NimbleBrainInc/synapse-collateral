@@ -57,19 +57,24 @@ interface ExportResult {
 }
 
 /**
- * Extract base64 image data from MCP content blocks returned by preview tools.
- * The server returns ImageContent blocks with audience:["user"] for the UI.
+ * Extract resource_link URIs from MCP tool content. The server returns
+ * resource_link blocks per the MCP spec; bytes are fetched separately
+ * via the platform's /v1/apps/{app}/resources/{uri} proxy.
  */
-function extractImagesFromContent(blocks: unknown[]): string[] {
+function extractResourceUris(blocks: unknown[]): string[] {
   return blocks
     .filter(
-      (block): block is { type: "image"; data: string } =>
+      (block): block is { type: "resource_link"; uri: string } =>
         block != null &&
         typeof block === "object" &&
-        (block as Record<string, unknown>).type === "image" &&
-        typeof (block as Record<string, unknown>).data === "string",
+        (block as Record<string, unknown>).type === "resource_link" &&
+        typeof (block as Record<string, unknown>).uri === "string",
     )
-    .map((block) => block.data);
+    .map((block) => block.uri);
+}
+
+function resourceUrl(uri: string): string {
+  return `/v1/apps/synapse-collateral/resources/${encodeURIComponent(uri)}`;
 }
 
 // --- Tab type ---
@@ -199,8 +204,8 @@ function CollateralStudioUI() {
     setPreviewError("");
     try {
       const result = await previewTool.call({});
-      const images = extractImagesFromContent(result.content ?? []);
-      setPages(images);
+      const uris = extractResourceUris(result.content ?? []);
+      setPages(uris);
       setPageIndex(0);
     } catch (e) {
       setPreviewError(e instanceof Error ? e.message : "Preview failed");
@@ -228,8 +233,8 @@ function CollateralStudioUI() {
     setPreviewError("");
     try {
       const result = await previewTemplateTool.call({ template_id: id });
-      const images = extractImagesFromContent(result.content ?? []);
-      setPages(images);
+      const uris = extractResourceUris(result.content ?? []);
+      setPages(uris);
       setPageIndex(0);
     } catch (e) {
       setPreviewError(e instanceof Error ? e.message : "Failed to preview template");
@@ -342,11 +347,15 @@ function CollateralStudioUI() {
 
   async function handleExport() {
     try {
-      const result = await exportPdf.call({ include_data: true });
-      const data = result.data as ExportResult;
-      if (!data.pdf_base64) return;
-      const raw = atob(data.pdf_base64);
-      synapse.downloadFile(data.filename || "document.pdf", raw, "application/pdf");
+      const result = await exportPdf.call({});
+      const uris = extractResourceUris(result.content ?? []);
+      const pdfUri = uris[0];
+      if (!pdfUri) return;
+      const res = await fetch(resourceUrl(pdfUri));
+      if (!res.ok) throw new Error(`Failed to fetch export: ${res.status}`);
+      const blob = await res.blob();
+      const filename = pdfUri.split("/").pop() || "document.pdf";
+      synapse.downloadFile(filename, blob, "application/pdf");
     } catch (e) {
       setPreviewError(e instanceof Error ? e.message : "Export failed");
     }
@@ -571,7 +580,7 @@ function CollateralStudioUI() {
           {pages.length > 0 && (
             <>
               <img
-                src={`data:image/png;base64,${pages[pageIndex]}`}
+                src={resourceUrl(pages[pageIndex])}
                 alt={`Page ${pageIndex + 1}`}
                 style={s.previewImg}
               />
