@@ -87,11 +87,14 @@ export function PDFViewer({ blob, onDownload }: PDFViewerProps) {
     const cw = bodyRef.current.clientWidth;
     const ch = bodyRef.current.clientHeight;
     if (cw <= 0 || ch <= 0) return;
-    const fitW = (cw - 16) / nativeWidth;
-    const fitH = (ch - 16) / nativeHeight;
+    // Generous gutter + floor quantization guarantee the scaled image is
+    // strictly smaller than the container, so integer pixel rounding in the
+    // rasterized PNG cannot produce an overflow at the fit boundary.
+    const fitW = (cw - 24) / nativeWidth;
+    const fitH = (ch - 24) / nativeHeight;
     const target = Math.min(fitW, fitH);
     const clamped = Math.min(MAX_SCALE, Math.max(MIN_SCALE, target));
-    const quantized = Math.round(clamped * 100) / 100;
+    const quantized = Math.floor(clamped * 100) / 100;
     setScale((prev) => (prev === quantized ? prev : quantized));
   }, [nativeWidth, nativeHeight]);
 
@@ -301,7 +304,12 @@ export function PDFViewer({ blob, onDownload }: PDFViewerProps) {
             alt={`Page ${page}`}
             style={{
               display: "block",
-              maxWidth: "none",
+              // In fit mode, cap the image CSS-wise so intrinsic PNG pixel
+              // dimensions can never overflow the container. In user-zoom
+              // mode, let natural size drive so scroll works.
+              maxWidth: userZoom ? "none" : "100%",
+              maxHeight: userZoom ? "none" : "100%",
+              width: "auto",
               height: "auto",
               boxShadow: tokens.shadowMd,
               background: "#fff",
