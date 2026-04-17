@@ -32,6 +32,7 @@ export function PDFViewer({ blob, downloadUrl, downloadFilename }: PDFViewerProp
   const [page, setPage] = useState(1);
   const [pageCount, setPageCount] = useState(1);
   const [nativeWidth, setNativeWidth] = useState<number | null>(null);
+  const [nativeHeight, setNativeHeight] = useState<number | null>(null);
   const [scale, setScale] = useState(1);
   const [userZoom, setUserZoom] = useState(false);
   const [dataUrl, setDataUrl] = useState<string | null>(null);
@@ -48,6 +49,7 @@ export function PDFViewer({ blob, downloadUrl, downloadFilename }: PDFViewerProp
     setPage(1);
     setPageCount(1);
     setNativeWidth(null);
+    setNativeHeight(null);
     setUserZoom(false);
     setScale(1);
     setRenderError("");
@@ -65,6 +67,7 @@ export function PDFViewer({ blob, downloadUrl, downloadFilename }: PDFViewerProp
         if (cancelled) return;
         const viewport = firstPage.getViewport({ scale: 1 });
         setNativeWidth(viewport.width);
+        setNativeHeight(viewport.height);
         setPdfBytes(buf);
       } catch (e) {
         if (cancelled) return;
@@ -77,21 +80,21 @@ export function PDFViewer({ blob, downloadUrl, downloadFilename }: PDFViewerProp
     };
   }, [blob]);
 
-  // Compute fit-to-width scale based on the body width vs. native page width.
+  // Compute fit-to-height scale based on body height vs. native page height.
   const recomputeFitScale = useCallback(() => {
-    if (!nativeWidth || !bodyRef.current) return;
-    const cw = bodyRef.current.clientWidth;
-    if (cw <= 0) return;
+    if (!nativeHeight || !bodyRef.current) return;
+    const ch = bodyRef.current.clientHeight;
+    if (ch <= 0) return;
     // Leave a small gutter so the image doesn't touch the scrollbar edge.
-    const target = Math.max(0.1, (cw - 16) / nativeWidth);
+    const target = Math.max(0.1, (ch - 16) / nativeHeight);
     setScale(Math.min(MAX_SCALE, Math.max(MIN_SCALE, target)));
-  }, [nativeWidth]);
+  }, [nativeHeight]);
 
-  // Recompute fit scale on first layout after nativeWidth resolves.
+  // Recompute fit scale on first layout after native dimensions resolve.
   useLayoutEffect(() => {
     if (userZoom) return;
     recomputeFitScale();
-  }, [nativeWidth, userZoom, recomputeFitScale]);
+  }, [nativeHeight, userZoom, recomputeFitScale]);
 
   // Observe container resizes and rescale to fit width (until user zooms).
   useEffect(() => {
@@ -229,7 +232,7 @@ export function PDFViewer({ blob, downloadUrl, downloadFilename }: PDFViewerProp
           type="button"
           className="collateral-pdf-viewer-btn"
           onClick={handleFit}
-          aria-label="Fit to width"
+          aria-label="Fit to page"
           style={{ marginLeft: "0.25rem" }}
         >
           Fit
