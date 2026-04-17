@@ -58,8 +58,8 @@ interface ExportResult {
 
 /**
  * Extract resource_link URIs from MCP tool content. The server returns
- * resource_link blocks per the MCP spec; bytes are fetched separately
- * via the platform's /v1/apps/{app}/resources/{uri} proxy.
+ * resource_link blocks per the MCP spec; bytes are fetched via
+ * synapse.readResource over the ext-apps bridge.
  */
 function extractResourceUris(blocks: unknown[]): string[] {
   return blocks
@@ -73,8 +73,28 @@ function extractResourceUris(blocks: unknown[]): string[] {
     .map((block) => block.uri);
 }
 
-function resourceUrl(uri: string): string {
-  return `/v1/apps/synapse-collateral/resources/${encodeURIComponent(uri)}`;
+function base64ToBytes(b64: string): Uint8Array {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+async function fetchResourceAsBlob(
+  synapse: ReturnType<typeof useSynapse>,
+  uri: string,
+): Promise<Blob> {
+  const result = await synapse.readResource(uri);
+  const first = result.contents[0];
+  if (!first) throw new Error("No content returned for " + uri);
+  const mimeType = first.mimeType ?? "application/octet-stream";
+  if (first.blob !== undefined) {
+    return new Blob([base64ToBytes(first.blob)], { type: mimeType });
+  }
+  if (first.text !== undefined) {
+    return new Blob([first.text], { type: mimeType });
+  }
+  throw new Error("Resource has neither blob nor text: " + uri);
 }
 
 // --- Tab type ---
@@ -151,6 +171,12 @@ function CollateralStudioUI() {
     return () => window.removeEventListener("keydown", onKey);
   }, [pages.length]);
 
+  useEffect(() => {
+    return () => {
+      for (const url of pages) URL.revokeObjectURL(url);
+    };
+  }, [pages]);
+
   const TOKEN_MAP: Record<string, string> = {
     background: "--color-background-primary",
     foreground: "--color-text-primary",
@@ -205,7 +231,13 @@ function CollateralStudioUI() {
     try {
       const result = await previewTool.call({});
       const uris = extractResourceUris(result.content ?? []);
-      setPages(uris);
+      const urls = await Promise.all(
+        uris.map(async (u) => URL.createObjectURL(await fetchResourceAsBlob(synapse, u))),
+      );
+      setPages((prev) => {
+        for (const old of prev) URL.revokeObjectURL(old);
+        return urls;
+      });
       setPageIndex(0);
     } catch (e) {
       setPreviewError(e instanceof Error ? e.message : "Preview failed");
@@ -234,7 +266,13 @@ function CollateralStudioUI() {
     try {
       const result = await previewTemplateTool.call({ template_id: id });
       const uris = extractResourceUris(result.content ?? []);
-      setPages(uris);
+      const urls = await Promise.all(
+        uris.map(async (u) => URL.createObjectURL(await fetchResourceAsBlob(synapse, u))),
+      );
+      setPages((prev) => {
+        for (const old of prev) URL.revokeObjectURL(old);
+        return urls;
+      });
       setPageIndex(0);
     } catch (e) {
       setPreviewError(e instanceof Error ? e.message : "Failed to preview template");
@@ -351,9 +389,7 @@ function CollateralStudioUI() {
       const uris = extractResourceUris(result.content ?? []);
       const pdfUri = uris[0];
       if (!pdfUri) return;
-      const res = await fetch(resourceUrl(pdfUri));
-      if (!res.ok) throw new Error(`Failed to fetch export: ${res.status}`);
-      const blob = await res.blob();
+      const blob = await fetchResourceAsBlob(synapse, pdfUri);
       const filename = pdfUri.split("/").pop() || "document.pdf";
       synapse.downloadFile(filename, blob, "application/pdf");
     } catch (e) {
@@ -580,7 +616,7 @@ function CollateralStudioUI() {
           {pages.length > 0 && (
             <>
               <img
-                src={resourceUrl(pages[pageIndex])}
+                src={pages[pageIndex]}
                 alt={`Page ${pageIndex + 1}`}
                 style={s.previewImg}
               />
