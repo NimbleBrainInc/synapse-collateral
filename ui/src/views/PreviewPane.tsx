@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { s } from "../styles";
 import { useThemeTokens } from "../theme-utils";
+import { PDFViewer } from "../components/PDFViewer";
 
 interface PreviewPaneProps {
   title: string;
@@ -20,18 +21,21 @@ export function PreviewPane({
   emptyHint,
 }: PreviewPaneProps) {
   const { t } = useThemeTokens();
-  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+
+  // Keep a blob URL solely for the header "Download" link. The PDFViewer
+  // rasterizes internally and does not need a blob URL.
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!blob) {
-      setObjectUrl((prev) => {
+      setDownloadUrl((prev) => {
         if (prev) URL.revokeObjectURL(prev);
         return null;
       });
       return;
     }
     const url = URL.createObjectURL(blob);
-    setObjectUrl((prev) => {
+    setDownloadUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);
       return url;
     });
@@ -82,9 +86,9 @@ export function PreviewPane({
             </svg>
             <span style={s.previewHeaderName}>{title}</span>
           </div>
-          {objectUrl && (
+          {downloadUrl && (
             <a
-              href={objectUrl}
+              href={downloadUrl}
               download={downloadFilename}
               aria-label="Download PDF"
               style={{ ...s.previewDownload, color: t("muted", "#6b7280") }}
@@ -108,19 +112,8 @@ export function PreviewPane({
           )}
         </div>
         <div style={s.previewBody}>
-          {objectUrl ? (
-            <iframe
-              src={objectUrl}
-              title="Document preview"
-              style={{
-                flex: 1,
-                width: "100%",
-                minHeight: 0,
-                border: 0,
-                display: "block",
-                background: "transparent",
-              }}
-            />
+          {blob ? (
+            <PDFViewer blob={blob} />
           ) : (
             <div style={{ ...s.previewStatus, color: t("muted", "#6b7280") }}>
               {error ? (

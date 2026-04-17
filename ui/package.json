@@ -10,7 +10,8 @@
   "dependencies": {
     "@nimblebrain/synapse": "^0.4.2",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "unpdf": "^1.6.0"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
