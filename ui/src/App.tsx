@@ -168,6 +168,20 @@ function CollateralStudioUI() {
   // Whether we have an active document or template loaded for preview
   const hasSelection = tab === "documents" ? !!selectedDocument : !!selectedTemplate;
 
+  const previewTitle = (() => {
+    if (tab === "templates" && selectedTemplate) {
+      return templates.find((x) => x.id === selectedTemplate)?.name ?? selectedTemplate;
+    }
+    if (tab === "documents" && selectedDocument) {
+      return docs.find((x) => x.id === selectedDocument)?.name ?? selectedDocument;
+    }
+    return "Preview";
+  })();
+  const downloadFilename = `${previewTitle
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "document"}.pdf`;
+
   // --- Data loading ---
 
   const loadTemplates = useCallback(async () => {
@@ -406,6 +420,7 @@ function CollateralStudioUI() {
 
   return (
     <div style={{ ...s.root, background: t("background", "#fff"), color: t("foreground", "#1a1a1a") }}>
+      <style>{PREVIEW_CSS}</style>
       {/* Top bar */}
       <nav style={{ ...s.nav, borderColor: t("border", "#e5e7eb") }}>
         <span style={s.logo}>Collateral Studio</span>
@@ -574,25 +589,76 @@ function CollateralStudioUI() {
         </div>
 
         {/* Right panel: preview */}
-        <div style={{ ...s.rightPanel, background: t("secondary", "#f3f4f6") }}>
-          {!hasSelection && (
-            <div style={{ color: t("muted", "#6b7280"), fontSize: "0.9rem" }}>
-              Select a {tab === "templates" ? "template" : "document"} to preview.
+        <div
+          className="collateral-preview-pane"
+          style={{ ...s.rightPanel, background: t("secondary", "#f3f4f6") }}
+        >
+          <div
+            className="collateral-preview-frame"
+            style={{
+              ...s.previewFrame,
+              background: t("background", "#ffffff"),
+              borderColor: t("border", "#e5e7eb"),
+            }}
+          >
+            <div
+              style={{
+                ...s.previewHeader,
+                borderBottomColor: t("border", "#e5e7eb"),
+                color: t("muted", "#6b7280"),
+              }}
+            >
+              <div style={s.previewHeaderLabel}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+                  <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" />
+                </svg>
+                <span style={s.previewHeaderName}>
+                  {previewTitle}
+                </span>
+              </div>
+              {previewUrl && (
+                <a
+                  href={previewUrl}
+                  download={downloadFilename}
+                  aria-label="Download PDF"
+                  style={{
+                    ...s.previewDownload,
+                    color: t("muted", "#6b7280"),
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M12 3v12" />
+                    <path d="m7 10 5 5 5-5" />
+                    <path d="M5 21h14" />
+                  </svg>
+                </a>
+              )}
             </div>
-          )}
-          {previewLoading && (
-            <div style={{ color: t("muted", "#6b7280"), fontSize: "0.8rem" }}>Rendering...</div>
-          )}
-          {previewError && (
-            <div style={{ color: t("destructive", "#ef4444"), fontSize: "0.78rem" }}>{previewError}</div>
-          )}
-          {previewUrl && (
-            <iframe
-              src={previewUrl}
-              title="Document preview"
-              style={{ width: "100%", height: "100%", minHeight: 600, border: 0, display: "block" }}
-            />
-          )}
+            <div style={s.previewBody}>
+              {previewUrl ? (
+                <iframe
+                  src={previewUrl}
+                  title="Document preview"
+                  style={s.previewIframe}
+                />
+              ) : (
+                <div style={{ ...s.previewStatus, color: t("muted", "#6b7280") }}>
+                  {previewError ? (
+                    <span style={{ color: t("destructive", "#ef4444") }}>{previewError}</span>
+                  ) : previewLoading ? (
+                    <span className="collateral-preview-dots" aria-label="Rendering">
+                      Rendering<span>.</span><span>.</span><span>.</span>
+                    </span>
+                  ) : !hasSelection ? (
+                    <span>
+                      Select a {tab === "templates" ? "template" : "document"} to preview
+                    </span>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1007,12 +1073,81 @@ const s: Record<string, React.CSSProperties> = {
   },
   rightPanel: {
     flex: 1,
+    minWidth: 0,
     display: "flex",
     flexDirection: "column" as const,
+    padding: "clamp(0rem, 2.5vw, 1.25rem)",
+    overflow: "hidden",
+  },
+  previewFrame: {
+    flex: 1,
+    minHeight: 0,
+    display: "flex",
+    flexDirection: "column" as const,
+    border: "1px solid",
+    borderRadius: 10,
+    overflow: "hidden",
+    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06)",
+  },
+  previewHeader: {
+    height: 36,
+    flexShrink: 0,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "0 0.75rem",
+    borderBottom: "1px solid",
+    fontSize: "0.72rem",
+    letterSpacing: "0.01em",
+  },
+  previewHeaderLabel: {
+    display: "flex",
+    alignItems: "center",
+    gap: "0.5rem",
+    minWidth: 0,
+    flex: 1,
+  },
+  previewHeaderName: {
+    whiteSpace: "nowrap" as const,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    fontWeight: 500,
+    fontSize: "0.76rem",
+    letterSpacing: "0",
+  },
+  previewDownload: {
+    display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    textDecoration: "none",
+    flexShrink: 0,
+    transition: "background 120ms ease, color 120ms ease",
+  },
+  previewBody: {
+    flex: 1,
+    minHeight: 0,
+    display: "flex",
+    flexDirection: "column" as const,
+  },
+  previewIframe: {
+    flex: 1,
+    width: "100%",
+    minHeight: 0,
+    border: 0,
+    display: "block",
+    background: "transparent",
+  },
+  previewStatus: {
+    flex: 1,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "0.82rem",
     padding: "1.5rem",
-    overflow: "auto",
+    textAlign: "center" as const,
   },
   // Settings panel
   settingsOverlay: {
@@ -1144,3 +1279,20 @@ const s: Record<string, React.CSSProperties> = {
     fontFamily: "inherit",
   },
 };
+
+const PREVIEW_CSS = `
+.collateral-preview-pane .collateral-preview-frame { transition: box-shadow 180ms ease, border-color 180ms ease; }
+.collateral-preview-pane a[aria-label="Download PDF"]:hover { background: rgba(15, 23, 42, 0.06); color: inherit; }
+.collateral-preview-pane a[aria-label="Download PDF"]:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.collateral-preview-dots span { display: inline-block; opacity: 0; animation: collateral-dot 1.4s infinite; }
+.collateral-preview-dots span:nth-child(2) { animation-delay: 0.2s; }
+.collateral-preview-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes collateral-dot { 0%, 80%, 100% { opacity: 0.2; } 40% { opacity: 1; } }
+@media (max-width: 640px) {
+  .collateral-preview-pane { padding: 0 !important; }
+  .collateral-preview-pane .collateral-preview-frame { border-radius: 0; border-left: 0; border-right: 0; box-shadow: none; }
+}
+@media (prefers-color-scheme: dark) {
+  .collateral-preview-pane a[aria-label="Download PDF"]:hover { background: rgba(255, 255, 255, 0.08); }
+}
+`;
