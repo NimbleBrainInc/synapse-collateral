@@ -76,28 +76,48 @@ export function PDFViewer({ blob, onDownload }: PDFViewerProps) {
     };
   }, [blob]);
 
+  // Fit the whole page into the container (min of width/height axes). Fitting
+  // only one axis can cause the other to overflow, which introduces a
+  // scrollbar, which shrinks the container, which re-triggers fit — a flicker
+  // loop. Fit-to-both guarantees no overflow, so no scrollbars, no loop.
+  // Scale is also quantized to 1% so sub-pixel client-rect jitter from the
+  // browser doesn't repeatedly cross our threshold.
   const recomputeFitScale = useCallback(() => {
-    if (!nativeHeight || !bodyRef.current) return;
+    if (!nativeWidth || !nativeHeight || !bodyRef.current) return;
+    const cw = bodyRef.current.clientWidth;
     const ch = bodyRef.current.clientHeight;
-    if (ch <= 0) return;
-    const target = Math.max(0.1, (ch - 16) / nativeHeight);
-    setScale(Math.min(MAX_SCALE, Math.max(MIN_SCALE, target)));
-  }, [nativeHeight]);
+    if (cw <= 0 || ch <= 0) return;
+    const fitW = (cw - 16) / nativeWidth;
+    const fitH = (ch - 16) / nativeHeight;
+    const target = Math.min(fitW, fitH);
+    const clamped = Math.min(MAX_SCALE, Math.max(MIN_SCALE, target));
+    const quantized = Math.round(clamped * 100) / 100;
+    setScale((prev) => (prev === quantized ? prev : quantized));
+  }, [nativeWidth, nativeHeight]);
 
   useLayoutEffect(() => {
     if (userZoom) return;
     recomputeFitScale();
-  }, [nativeHeight, userZoom, recomputeFitScale]);
+  }, [nativeHeight, nativeWidth, userZoom, recomputeFitScale]);
 
   useEffect(() => {
     const el = bodyRef.current;
     if (!el) return;
     if (typeof ResizeObserver === "undefined") return;
+    let rafId = 0;
     const ro = new ResizeObserver(() => {
-      if (!userZoom) recomputeFitScale();
+      if (userZoom) return;
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        rafId = 0;
+        recomputeFitScale();
+      });
     });
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      ro.disconnect();
+    };
   }, [userZoom, recomputeFitScale]);
 
   useEffect(() => {
