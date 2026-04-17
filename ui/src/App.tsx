@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useDataSync } from "@nimblebrain/synapse/react";
 import { s } from "./styles";
-import { useThemeTokens } from "./theme-utils";
+import { useInjectThemeTokens, useThemeTokens } from "./theme-utils";
 import { injectResponsiveStyles } from "./styles/responsive";
 import { TopNav } from "./components/TopNav";
 import type { Tab, SaveStatus } from "./components/TopNav";
@@ -24,6 +24,7 @@ type DialogType =
   | null;
 
 export function App() {
+  useInjectThemeTokens();
   const { t } = useThemeTokens();
   const [tab, setTab] = useState<Tab>("documents");
 
