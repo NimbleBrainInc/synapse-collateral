@@ -520,45 +520,6 @@ async def install_font(
 # --- Rendering helpers ---
 
 
-def _render_pngs(pngs: list[bytes], summary_name: str) -> ToolResult:
-    """Store each PNG as an export and return a ToolResult with resource_link blocks.
-
-    Bytes are written to disk and addressed by `collateral://exports/<id>.png` so
-    tool results stay small regardless of page count or image size.
-    """
-    total_bytes = sum(len(p) for p in pngs)
-    page_count = len(pngs)
-
-    links: list[ResourceLink] = []
-    ids: list[str] = []
-    for i, data in enumerate(pngs, start=1):
-        export_id, _ = store_export(data, "png")
-        ids.append(export_id)
-        links.append(
-            ResourceLink(
-                type="resource_link",
-                uri=AnyUrl(f"collateral://exports/{export_id}.png"),
-                name=f"Page {i} preview",
-                mimeType="image/png",
-                description=f"{summary_name} — page {i} of {page_count}",
-                annotations=_USER_ONLY,
-            )
-        )
-
-    summary = (
-        f"{summary_name}: {page_count} page{'s' if page_count != 1 else ''} "
-        f"({total_bytes // 1024 or 1}KB total)"
-    )
-    content: list[Any] = [TextContent(type="text", text=summary), *links]
-    structured = {
-        "export_ids": ids,
-        "page_count": page_count,
-        "size_bytes": total_bytes,
-        "mime_type": "image/png",
-    }
-    return ToolResult(content=content, structured_content=structured)
-
-
 def _render_pdf(pdf_bytes: bytes, summary_name: str) -> ToolResult:
     size = len(pdf_bytes)
     # Typst emits one /Page object per page; /Pages is the catalog node.
@@ -594,32 +555,31 @@ def _render_pdf(pdf_bytes: bytes, summary_name: str) -> ToolResult:
 
 @mcp.tool()
 async def preview(page: int | None = None) -> ToolResult:
-    """Render the current document to PNG preview images.
+    """Render the current document to a PDF preview.
 
-    Returns a terse text summary and one resource_link per page. Pages
-    live at ``collateral://exports/<id>.png`` — read them via resources/read.
+    Returns a text summary and a resource_link to the PDF at
+    ``collateral://exports/<id>.pdf``. Clients read via ``resources/read``
+    and render with a native PDF viewer.
 
     Args:
-        page: Optional page number (1-based) for single-page render.
+        page: Optional page number (1-based) for a single-page preview.
     """
     from . import compiler
 
     if page is not None:
-        pngs = compiler.compile_source(_ws.source, _ws.logo_data, output_format="png", page=page)
-    elif _ws._cached_pngs is not None:
-        pngs = _ws._cached_pngs
-    else:
-        pngs = compiler.compile_source(_ws.source, _ws.logo_data, output_format="png")
-        _ws._cached_pngs = pngs
-    return _render_pngs(pngs, f"Preview of {_ws.document_name}")
+        pdf_bytes = compiler.compile_source(_ws.source, _ws.logo_data, page=page)
+        return _render_pdf(pdf_bytes, f"Preview of {_ws.document_name} (page {page})")
+
+    if _ws._cached_pdf is None:
+        _ws._cached_pdf = compiler.compile_source(_ws.source, _ws.logo_data)
+    return _render_pdf(_ws._cached_pdf, f"Preview of {_ws.document_name}")
 
 
 @mcp.tool()
 async def preview_template(template_id: str) -> ToolResult:
     """Preview a template without creating a document.
 
-    Compiles and renders the template source directly. Does not modify
-    workspace state. Returns a text summary and one resource_link per page.
+    Compiles the template source to PDF. Does not modify workspace state.
 
     Args:
         template_id: Template identifier (e.g., "proposal", "lead-magnet").
@@ -627,23 +587,20 @@ async def preview_template(template_id: str) -> ToolResult:
     from . import compiler
 
     source = template_mod.get_source(template_id)
-    pngs = compiler.compile_source(source, {}, output_format="png")
-    return _render_pngs(pngs, f"Template preview: {template_id}")
+    pdf_bytes = compiler.compile_source(source, {})
+    return _render_pdf(pdf_bytes, f"Template preview: {template_id}")
 
 
 @mcp.tool()
 async def export_pdf() -> ToolResult:
-    """Export the current document as a final PDF.
+    """Export the current document as a PDF.
 
     Returns a text summary and a resource_link to ``collateral://exports/<id>.pdf``.
-    Clients fetch the PDF bytes via standard ``resources/read``.
     """
-    # Use the workspace compile cache to avoid redundant work.
     if _ws._cached_pdf is None:
         from . import compiler
 
-        pdf_pages = compiler.compile_source(_ws.source, _ws.logo_data, output_format="pdf")
-        _ws._cached_pdf = pdf_pages[0]
+        _ws._cached_pdf = compiler.compile_source(_ws.source, _ws.logo_data)
     return _render_pdf(_ws._cached_pdf, f"Export of {_ws.document_name}")
 
 
@@ -651,15 +608,13 @@ async def export_pdf() -> ToolResult:
 async def compile_typst(source: str) -> ToolResult:
     """Compile raw Typst source to PDF. Bypasses workspace entirely.
 
-    Returns a text summary and a resource_link to the compiled PDF.
-
     Args:
         source: Raw Typst source code.
     """
     from . import compiler
 
-    pdf_pages = compiler.compile_source(source, output_format="pdf")
-    return _render_pdf(pdf_pages[0], "Compiled Typst document")
+    pdf_bytes = compiler.compile_source(source)
+    return _render_pdf(pdf_bytes, "Compiled Typst document")
 
 
 # ---------------------------------------------------------------------------

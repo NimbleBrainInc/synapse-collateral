@@ -43,19 +43,6 @@ interface ThemeData {
   spacing: Record<string, string>;
 }
 
-interface PreviewResult {
-  pages: { page_number: number; image_base64: string | null }[];
-  page_count: number;
-  message: string;
-}
-
-interface ExportResult {
-  filename: string;
-  pdf_base64: string | null;
-  page_count: number;
-  size_bytes: number;
-}
-
 /**
  * Extract resource_link URIs from MCP tool content. The server returns
  * resource_link blocks per the MCP spec; bytes are fetched via
@@ -139,8 +126,7 @@ function CollateralStudioUI() {
   const [selectedDocument, setSelectedDocument] = useState<string | null>(null);
 
   // Preview state
-  const [pages, setPages] = useState<string[]>([]);
-  const [pageIndex, setPageIndex] = useState(0);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState("");
   const [previewLoading, setPreviewLoading] = useState(false);
 
@@ -159,23 +145,11 @@ function CollateralStudioUI() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
 
-  // Synapse design token map
-  // Keyboard navigation for preview pages (left/right arrows)
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (pages.length <= 1) return;
-      if (e.key === "ArrowLeft") setPageIndex((i) => Math.max(0, i - 1));
-      if (e.key === "ArrowRight") setPageIndex((i) => Math.min(pages.length - 1, i + 1));
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [pages.length]);
-
   useEffect(() => {
     return () => {
-      for (const url of pages) URL.revokeObjectURL(url);
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
     };
-  }, [pages]);
+  }, [previewUrl]);
 
   const TOKEN_MAP: Record<string, string> = {
     background: "--color-background-primary",
@@ -230,15 +204,13 @@ function CollateralStudioUI() {
     setPreviewError("");
     try {
       const result = await previewTool.call({});
-      const uris = extractResourceUris(result.content ?? []);
-      const urls = await Promise.all(
-        uris.map(async (u) => URL.createObjectURL(await fetchResourceAsBlob(synapse, u))),
-      );
-      setPages((prev) => {
-        for (const old of prev) URL.revokeObjectURL(old);
-        return urls;
+      const [uri] = extractResourceUris(result.content ?? []);
+      if (!uri) throw new Error("Preview returned no resource_link");
+      const url = URL.createObjectURL(await fetchResourceAsBlob(synapse, uri));
+      setPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return url;
       });
-      setPageIndex(0);
     } catch (e) {
       setPreviewError(e instanceof Error ? e.message : "Preview failed");
     }
@@ -265,15 +237,13 @@ function CollateralStudioUI() {
     setPreviewError("");
     try {
       const result = await previewTemplateTool.call({ template_id: id });
-      const uris = extractResourceUris(result.content ?? []);
-      const urls = await Promise.all(
-        uris.map(async (u) => URL.createObjectURL(await fetchResourceAsBlob(synapse, u))),
-      );
-      setPages((prev) => {
-        for (const old of prev) URL.revokeObjectURL(old);
-        return urls;
+      const [uri] = extractResourceUris(result.content ?? []);
+      if (!uri) throw new Error("Template preview returned no resource_link");
+      const url = URL.createObjectURL(await fetchResourceAsBlob(synapse, uri));
+      setPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return url;
       });
-      setPageIndex(0);
     } catch (e) {
       setPreviewError(e instanceof Error ? e.message : "Failed to preview template");
     }
@@ -353,7 +323,10 @@ function CollateralStudioUI() {
       setDialogType(null);
       if (selectedTemplate === id) {
         setSelectedTemplate(null);
-        setPages([]);
+        setPreviewUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return null;
+        });
       }
       await loadTemplates();
     } catch { /* non-critical */ }
@@ -613,33 +586,12 @@ function CollateralStudioUI() {
           {previewError && (
             <div style={{ color: t("destructive", "#ef4444"), fontSize: "0.78rem" }}>{previewError}</div>
           )}
-          {pages.length > 0 && (
-            <>
-              <img
-                src={pages[pageIndex]}
-                alt={`Page ${pageIndex + 1}`}
-                style={s.previewImg}
-              />
-              {pages.length > 1 && (
-                <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", marginTop: "0.75rem", fontSize: "0.8rem", color: t("muted", "#6b7280") }}>
-                  <button
-                    style={{ ...s.pageBtn, borderColor: t("border", "#e5e7eb"), background: t("background", "#fff") }}
-                    disabled={pageIndex === 0}
-                    onClick={() => setPageIndex((i) => i - 1)}
-                  >
-                    &laquo;
-                  </button>
-                  <span>{pageIndex + 1} / {pages.length}</span>
-                  <button
-                    style={{ ...s.pageBtn, borderColor: t("border", "#e5e7eb"), background: t("background", "#fff") }}
-                    disabled={pageIndex === pages.length - 1}
-                    onClick={() => setPageIndex((i) => i + 1)}
-                  >
-                    &raquo;
-                  </button>
-                </div>
-              )}
-            </>
+          {previewUrl && (
+            <iframe
+              src={previewUrl}
+              title="Document preview"
+              style={{ width: "100%", height: "100%", minHeight: 600, border: 0, display: "block" }}
+            />
           )}
         </div>
       </div>
@@ -1061,21 +1013,6 @@ const s: Record<string, React.CSSProperties> = {
     justifyContent: "center",
     padding: "1.5rem",
     overflow: "auto",
-  },
-  previewImg: {
-    maxWidth: "100%",
-    maxHeight: "calc(100vh - 220px)",
-    boxShadow: "0 2px 20px rgba(0,0,0,0.12)",
-    borderRadius: 3,
-  },
-  pageBtn: {
-    border: "1px solid",
-    borderRadius: 4,
-    padding: "0.2rem 0.6rem",
-    cursor: "pointer",
-    fontSize: "0.75rem",
-    fontFamily: "inherit",
-    background: "none",
   },
   // Settings panel
   settingsOverlay: {

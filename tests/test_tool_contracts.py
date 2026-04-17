@@ -344,50 +344,45 @@ def _result_byte_size(result) -> int:
 class TestRenderingContracts:
     """Preview/export tools return small results with resource_link blocks."""
 
-    async def test_preview_returns_resource_links(self, mcp_client) -> None:
+    async def test_preview_returns_pdf_resource_link(self, mcp_client) -> None:
         await mcp_client.call_tool("create_document", {"name": "Preview Doc"})
         result = await mcp_client.call_tool("preview", {})
 
-        # Result stays small regardless of page count.
         assert _result_byte_size(result) < 10_000
 
         links = [b for b in result.content if getattr(b, "type", None) == "resource_link"]
-        assert links, "preview must return at least one resource_link block"
-        for link in links:
-            assert str(link.uri).startswith("collateral://exports/")
-            assert str(link.uri).endswith(".png")
-            assert link.mimeType == "image/png"
+        assert len(links) == 1
+        link = links[0]
+        assert str(link.uri).startswith("collateral://exports/")
+        assert str(link.uri).endswith(".pdf")
+        assert link.mimeType == "application/pdf"
 
-        # No base64 payload anywhere in the content blocks.
         for b in result.content:
             dumped = b.model_dump_json()
             assert len(dumped) < 2_000, "no block should inline large bytes"
 
-        # Structured content exposes ids and counts for programmatic callers.
         data = result.structured_content
         assert data is not None
-        assert data["page_count"] == len(links)
-        assert data["mime_type"] == "image/png"
+        assert data["mime_type"] == "application/pdf"
         assert data["size_bytes"] > 0
+        assert data["export_id"].startswith("exp_")
 
-    async def test_preview_resource_link_fetches_png(self, mcp_client) -> None:
+    async def test_preview_resource_link_fetches_pdf(self, mcp_client) -> None:
         await mcp_client.call_tool("create_document", {"name": "Fetch Doc"})
         result = await mcp_client.call_tool("preview", {})
         link = next(b for b in result.content if getattr(b, "type", None) == "resource_link")
 
         contents = await mcp_client.read_resource(str(link.uri))
         assert contents, "resources/read must return content"
-        # PNG magic bytes
         import base64 as _b64
 
         first = contents[0]
         raw = _b64.b64decode(first.blob) if hasattr(first, "blob") else first.text.encode()
-        assert raw.startswith(b"\x89PNG\r\n\x1a\n")
+        assert raw.startswith(b"%PDF")
 
-    async def test_preview_template_returns_resource_links(self, mcp_client) -> None:
+    async def test_preview_template_returns_pdf_resource_link(self, mcp_client) -> None:
         templates_result = await mcp_client.call_tool("list_templates", {})
         templates = templates_result.structured_content
-        # Structured result wraps list under "result" when no schema is set.
         tlist = (
             templates["result"]
             if isinstance(templates, dict) and "result" in templates
@@ -400,10 +395,10 @@ class TestRenderingContracts:
         result = await mcp_client.call_tool("preview_template", {"template_id": tid})
         assert _result_byte_size(result) < 10_000
         links = [b for b in result.content if getattr(b, "type", None) == "resource_link"]
-        assert links
-        for link in links:
-            assert str(link.uri).startswith("collateral://exports/")
-            assert link.mimeType == "image/png"
+        assert len(links) == 1
+        link = links[0]
+        assert str(link.uri).startswith("collateral://exports/")
+        assert link.mimeType == "application/pdf"
 
     async def test_export_pdf_returns_resource_link(self, mcp_client) -> None:
         await mcp_client.call_tool("create_document", {"name": "Export Doc"})

@@ -23,9 +23,6 @@ from . import templates as template_mod
 from . import theme as theme_mod
 from .models import (
     DocumentInfo,
-    ExportResult,
-    PagePreview,
-    PreviewResult,
     TemplateInfo,
     ThemeData,
     WorkspaceState,
@@ -105,7 +102,6 @@ class Workspace:
         self.logo_data: dict[str, bytes] = {}
         self.created: str | None = None
         self._cached_pdf: bytes | None = None
-        self._cached_pngs: list[bytes] | None = None
 
     # --- Introspection ---
 
@@ -395,51 +391,6 @@ class Workspace:
         path = store.write_components(source)
         return {"status": "saved", "path": str(path)}
 
-    def preview_template(self, template_id: str, include_images: bool = False) -> PreviewResult:
-        """Preview a template without creating a document. Does not modify workspace state."""
-        source = template_mod.get_source(template_id)
-        pngs = compiler.compile_source(source, {}, output_format="png")
-        return self._build_preview(pngs, include_images=include_images)
-
-    # --- Rendering ---
-
-    def preview(self, page: int | None = None, include_images: bool = False) -> PreviewResult:
-        if self._cached_pngs is not None and page is None:
-            return self._build_preview(self._cached_pngs, include_images=include_images)
-
-        if page is not None:
-            pngs = compiler.compile_source(
-                self.source, self.logo_data, output_format="png", page=page
-            )
-            previews = [
-                PagePreview(
-                    page_number=page,
-                    image_base64=base64.b64encode(d).decode() if include_images else None,
-                )
-                for d in pngs
-            ]
-            return PreviewResult(
-                pages=previews,
-                page_count=len(previews),
-                message=f"Preview rendered ({len(previews)} page{'s' if len(previews) != 1 else ''})",
-            )
-
-        pngs = compiler.compile_source(self.source, self.logo_data, output_format="png")
-        self._cached_pngs = pngs
-        return self._build_preview(pngs, include_images=include_images)
-
-    def export_pdf(self, include_data: bool = False) -> ExportResult:
-        if self._cached_pdf is not None:
-            return self._build_export(self._cached_pdf, include_data=include_data)
-
-        pdf_pages = compiler.compile_source(self.source, self.logo_data, output_format="pdf")
-        self._cached_pdf = pdf_pages[0]
-        return self._build_export(self._cached_pdf, include_data=include_data)
-
-    def compile_typst(self, source: str) -> ExportResult:
-        pdf_pages = compiler.compile_source(source, output_format="pdf")
-        return self._build_export(pdf_pages[0], filename="compiled.pdf", include_data=True)
-
     # --- Fonts ---
 
     def list_fonts(self) -> list[str]:
@@ -501,17 +452,10 @@ class Workspace:
 
     def _invalidate(self) -> None:
         self._cached_pdf = None
-        self._cached_pngs = None
 
     def _verify_compile(self) -> None:
-        """Compile to PDF + PNG, cache both, and write PDF to disk. Raises RuntimeError on failure."""
-        pdf_pages = compiler.compile_source(self.source, self.logo_data, output_format="pdf")
-        self._cached_pdf = pdf_pages[0]
-        # Also compile PNGs so preview() never needs a second compile
-        self._cached_pngs = compiler.compile_source(
-            self.source, self.logo_data, output_format="png"
-        )
-        # Write the compiled PDF to disk for the preview resource
+        """Compile to PDF, cache it, and write to disk. Raises RuntimeError on failure."""
+        self._cached_pdf = compiler.compile_source(self.source, self.logo_data)
         if self.document_id:
             doc_dir = store.DOCUMENTS_DIR / self.document_id
             doc_dir.mkdir(parents=True, exist_ok=True)
@@ -527,43 +471,6 @@ class Workspace:
                 template_id=self.template_id,
                 created=self.created,
             )
-
-    @staticmethod
-    def _build_preview(pngs: list[bytes], *, include_images: bool = False) -> PreviewResult:
-        previews = [
-            PagePreview(
-                page_number=i + 1,
-                image_base64=base64.b64encode(d).decode() if include_images else None,
-            )
-            for i, d in enumerate(pngs)
-        ]
-        count = len(previews)
-        return PreviewResult(
-            pages=previews,
-            page_count=count,
-            message=f"Preview rendered ({count} page{'s' if count != 1 else ''})",
-        )
-
-    @staticmethod
-    def _build_export(
-        pdf_bytes: bytes,
-        filename: str = "document.pdf",
-        *,
-        include_data: bool = False,
-    ) -> ExportResult:
-        size = len(pdf_bytes)
-        # Count pages by scanning PDF cross-reference for /Type /Page entries
-        page_count = pdf_bytes.count(b"/Type /Page") - pdf_bytes.count(b"/Type /Pages")
-        if page_count < 1:
-            page_count = 1
-        size_kb = size // 1024 or 1
-        return ExportResult(
-            pdf_base64=base64.b64encode(pdf_bytes).decode() if include_data else None,
-            filename=filename,
-            page_count=page_count,
-            size_bytes=size,
-            message=f"PDF exported ({page_count} page{'s' if page_count != 1 else ''}, {size_kb}KB)",
-        )
 
 
 def _slugify(name: str) -> str:
