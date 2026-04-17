@@ -1,7 +1,7 @@
 {
   "manifest_version": "0.4",
   "name": "@nimblebraininc/synapse-collateral",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "description": "Collateral Studio — Typst-powered document generation with brand-aware templates, live preview, and conversational iteration",
   "author": {
     "name": "NimbleBrain Inc",
@@ -23,37 +23,130 @@
     }
   },
   "tools": [
-    { "name": "get_theme", "description": "Get the current document's theme (colors, fonts, spacing)" },
-    { "name": "set_theme", "description": "Update theme tokens in the current document" },
-    { "name": "list_templates", "description": "List available templates with full variable schemas" },
-    { "name": "get_template", "description": "Get a template's full details: info, source, and theme" },
-    { "name": "create_template", "description": "Create a new template from source and schema" },
-    { "name": "duplicate_template", "description": "Duplicate an existing template under a new ID" },
-    { "name": "delete_template", "description": "Delete a user-created template" },
-    { "name": "create_document", "description": "Create a new document and set it as the active workspace" },
-    { "name": "list_documents", "description": "List saved documents with metadata" },
-    { "name": "open_document", "description": "Load a saved document into the workspace" },
-    { "name": "save_document", "description": "Persist the current workspace to the filesystem" },
-    { "name": "save_as_template", "description": "Promote the current document's source into a new reusable template" },
-    { "name": "delete_document", "description": "Delete a document from disk" },
-    { "name": "get_workspace", "description": "Get workspace metadata: document name, template, and theme" },
-    { "name": "get_source", "description": "Get the current document's full Typst source code" },
-    { "name": "patch_source", "description": "Apply targeted find/replace edits to the Typst source" },
-    { "name": "set_source", "description": "Replace the full Typst source" },
-    { "name": "import_content", "description": "Extract text from an uploaded file for use as source material" },
-    { "name": "upload_asset", "description": "Upload a binary asset (image, logo, icon) for use in documents" },
-    { "name": "list_assets", "description": "List uploaded asset filenames available for use in documents" },
-    { "name": "delete_asset", "description": "Delete an uploaded asset by filename" },
-    { "name": "get_voice", "description": "Get the current brand voice document" },
-    { "name": "set_voice", "description": "Set the brand voice document that guides writing style" },
-    { "name": "get_components", "description": "Get the current reusable Typst components" },
-    { "name": "set_components", "description": "Save reusable Typst components (functions, styles, macros)" },
-    { "name": "list_fonts", "description": "List font families available to typst (system + custom)" },
-    { "name": "install_font", "description": "Install a font from URL or base64 data" },
-    { "name": "preview", "description": "Render the current document to PNG preview images" },
-    { "name": "preview_template", "description": "Preview a template without creating a document" },
-    { "name": "export_pdf", "description": "Export the current document as a final PDF" },
-    { "name": "compile_typst", "description": "Compile raw Typst source to PDF" }
+    {
+      "name": "get_theme",
+      "description": "Get the current document's theme (colors, fonts, spacing)"
+    },
+    {
+      "name": "set_theme",
+      "description": "Update theme tokens in the current document"
+    },
+    {
+      "name": "list_templates",
+      "description": "List available templates with full variable schemas"
+    },
+    {
+      "name": "get_template",
+      "description": "Get a template's full details: info, source, and theme"
+    },
+    {
+      "name": "create_template",
+      "description": "Create a new template from source and schema"
+    },
+    {
+      "name": "duplicate_template",
+      "description": "Duplicate an existing template under a new ID"
+    },
+    {
+      "name": "delete_template",
+      "description": "Delete a user-created template"
+    },
+    {
+      "name": "create_document",
+      "description": "Create a new document and set it as the active workspace"
+    },
+    {
+      "name": "list_documents",
+      "description": "List saved documents with metadata"
+    },
+    {
+      "name": "open_document",
+      "description": "Load a saved document into the workspace"
+    },
+    {
+      "name": "save_document",
+      "description": "Persist the current workspace to the filesystem"
+    },
+    {
+      "name": "save_as_template",
+      "description": "Promote the current document's source into a new reusable template"
+    },
+    {
+      "name": "delete_document",
+      "description": "Delete a document from disk"
+    },
+    {
+      "name": "get_workspace",
+      "description": "Get workspace metadata: document name, template, and theme"
+    },
+    {
+      "name": "get_source",
+      "description": "Get the current document's full Typst source code"
+    },
+    {
+      "name": "patch_source",
+      "description": "Apply targeted find/replace edits to the Typst source"
+    },
+    {
+      "name": "set_source",
+      "description": "Replace the full Typst source"
+    },
+    {
+      "name": "import_content",
+      "description": "Extract text from an uploaded file for use as source material"
+    },
+    {
+      "name": "upload_asset",
+      "description": "Upload a binary asset (image, logo, icon) for use in documents"
+    },
+    {
+      "name": "list_assets",
+      "description": "List uploaded asset filenames available for use in documents"
+    },
+    {
+      "name": "delete_asset",
+      "description": "Delete an uploaded asset by filename"
+    },
+    {
+      "name": "get_voice",
+      "description": "Get the current brand voice document"
+    },
+    {
+      "name": "set_voice",
+      "description": "Set the brand voice document that guides writing style"
+    },
+    {
+      "name": "get_components",
+      "description": "Get the current reusable Typst components"
+    },
+    {
+      "name": "set_components",
+      "description": "Save reusable Typst components (functions, styles, macros)"
+    },
+    {
+      "name": "list_fonts",
+      "description": "List font families available to typst (system + custom)"
+    },
+    {
+      "name": "install_font",
+      "description": "Install a font from URL or base64 data"
+    },
+    {
+      "name": "preview",
+      "description": "Render the current document to PNG preview images"
+    },
+    {
+      "name": "preview_template",
+      "description": "Preview a template without creating a document"
+    },
+    {
+      "name": "export_pdf",
+      "description": "Export the current document as a final PDF"
+    },
+    {
+      "name": "compile_typst",
+      "description": "Compile raw Typst source to PDF"
+    }
   ],
   "_meta": {
     "org.mpaktrust": {
