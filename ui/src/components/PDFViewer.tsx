@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 // unpdf ships a serverless PDF.js build with the worker inlined, so no
 // separate worker file is needed in the browser.
-import { getDocumentProxy, renderPageAsImage } from "unpdf";
+import { getDocumentProxy } from "unpdf";
 import { tokens } from "../styles";
 
 interface PDFViewerProps {
@@ -15,34 +15,51 @@ const STEP_IN = 1.25;
 const STEP_OUT = 0.8;
 const CACHE_CAP = 10;
 
-type PageCache = Map<string, string>;
+// PDF.js types we actually touch. Using narrow shapes instead of pulling the
+// full pdfjs-dist typing surface.
+interface PdfViewport {
+  width: number;
+  height: number;
+}
+interface PdfPage {
+  getViewport(opts: { scale: number }): PdfViewport;
+  render(opts: { canvasContext: CanvasRenderingContext2D; viewport: PdfViewport }): {
+    promise: Promise<void>;
+    cancel: () => void;
+  };
+}
+interface PdfDocument {
+  numPages: number;
+  getPage(n: number): Promise<PdfPage>;
+}
 
-function cacheKey(page: number, scale: number) {
-  return `${page}@${scale.toFixed(3)}`;
+type PageCache = Map<string, ImageBitmap>;
+
+function cacheKey(page: number, scale: number, dpr: number) {
+  return `${page}@${scale.toFixed(3)}x${dpr.toFixed(2)}`;
 }
 
 export function PDFViewer({ blob, onDownload }: PDFViewerProps) {
   const bodyRef = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const docRef = useRef<PdfDocument | null>(null);
 
-  // Immutable snapshot of the PDF bytes. unpdf transfers the underlying buffer,
-  // so we keep a Uint8Array per render and clone it for each invocation.
-  const [pdfBytes, setPdfBytes] = useState<Uint8Array | null>(null);
   const [page, setPage] = useState(1);
   const [pageCount, setPageCount] = useState(1);
   const [nativeWidth, setNativeWidth] = useState<number | null>(null);
   const [nativeHeight, setNativeHeight] = useState<number | null>(null);
   const [scale, setScale] = useState(1);
   const [userZoom, setUserZoom] = useState(false);
-  const [dataUrl, setDataUrl] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
   const [renderError, setRenderError] = useState("");
 
   const cacheRef = useRef<PageCache>(new Map());
   const renderSeq = useRef(0);
 
+  // Load the PDF, keep the doc proxy in a ref, and read the first page viewport.
   useEffect(() => {
     let cancelled = false;
-    setPdfBytes(null);
-    setDataUrl(null);
+    setReady(false);
     setPage(1);
     setPageCount(1);
     setNativeWidth(null);
@@ -50,21 +67,25 @@ export function PDFViewer({ blob, onDownload }: PDFViewerProps) {
     setUserZoom(false);
     setScale(1);
     setRenderError("");
+    // Free any cached bitmaps from the previous PDF.
+    for (const bmp of cacheRef.current.values()) bmp.close();
     cacheRef.current = new Map();
+    docRef.current = null;
 
     (async () => {
       try {
         const buf = new Uint8Array(await blob.arrayBuffer());
         if (cancelled) return;
-        const doc = await getDocumentProxy(new Uint8Array(buf));
+        const doc = (await getDocumentProxy(new Uint8Array(buf))) as unknown as PdfDocument;
         if (cancelled) return;
+        docRef.current = doc;
         setPageCount(doc.numPages);
         const firstPage = await doc.getPage(1);
         if (cancelled) return;
         const viewport = firstPage.getViewport({ scale: 1 });
         setNativeWidth(viewport.width);
         setNativeHeight(viewport.height);
-        setPdfBytes(buf);
+        setReady(true);
       } catch (e) {
         if (cancelled) return;
         setRenderError(e instanceof Error ? e.message : "Failed to load PDF");
@@ -76,20 +97,14 @@ export function PDFViewer({ blob, onDownload }: PDFViewerProps) {
     };
   }, [blob]);
 
-  // Fit the whole page into the container (min of width/height axes). Fitting
-  // only one axis can cause the other to overflow, which introduces a
-  // scrollbar, which shrinks the container, which re-triggers fit — a flicker
-  // loop. Fit-to-both guarantees no overflow, so no scrollbars, no loop.
-  // Scale is also quantized to 1% so sub-pixel client-rect jitter from the
-  // browser doesn't repeatedly cross our threshold.
+  // Fit the whole page into the container (min of width/height axes). Fit both
+  // axes + floor + generous gutter keep the rendered page strictly smaller
+  // than the container so no scrollbar can appear in fit mode.
   const recomputeFitScale = useCallback(() => {
     if (!nativeWidth || !nativeHeight || !bodyRef.current) return;
     const cw = bodyRef.current.clientWidth;
     const ch = bodyRef.current.clientHeight;
     if (cw <= 0 || ch <= 0) return;
-    // Generous gutter + floor quantization guarantee the scaled image is
-    // strictly smaller than the container, so integer pixel rounding in the
-    // rasterized PNG cannot produce an overflow at the fit boundary.
     const fitW = (cw - 24) / nativeWidth;
     const fitH = (ch - 24) / nativeHeight;
     const target = Math.min(fitW, fitH);
@@ -123,36 +138,80 @@ export function PDFViewer({ blob, onDownload }: PDFViewerProps) {
     };
   }, [userZoom, recomputeFitScale]);
 
+  // Render the current page + scale into the canvas. PDF.js draws directly into
+  // the 2D context — no intermediate PNG, no data URL. Rendered frames are
+  // cached as ImageBitmaps so re-fits and zoom-backs are instant blits.
   useEffect(() => {
-    if (!pdfBytes || !nativeWidth) return;
-    const key = cacheKey(page, scale);
+    if (!ready || !docRef.current || !nativeWidth || !nativeHeight) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+    const backingW = Math.round(nativeWidth * scale * dpr);
+    const backingH = Math.round(nativeHeight * scale * dpr);
+    const cssW = backingW / dpr;
+    const cssH = backingH / dpr;
+
+    // Size the canvas up front so layout is stable before async work.
+    if (canvas.width !== backingW) canvas.width = backingW;
+    if (canvas.height !== backingH) canvas.height = backingH;
+    canvas.style.width = `${cssW}px`;
+    canvas.style.height = `${cssH}px`;
+
+    const key = cacheKey(page, scale, dpr);
     const cached = cacheRef.current.get(key);
     if (cached) {
-      setDataUrl(cached);
+      ctx.clearRect(0, 0, backingW, backingH);
+      ctx.drawImage(cached, 0, 0);
       return;
     }
+
     const seq = ++renderSeq.current;
+    let task: { cancel: () => void } | null = null;
+
     (async () => {
       try {
-        const url = await renderPageAsImage(new Uint8Array(pdfBytes), page, {
-          scale,
-          toDataURL: true,
-        });
+        const doc = docRef.current;
+        if (!doc) return;
+        const pdfPage = await doc.getPage(page);
         if (seq !== renderSeq.current) return;
-        const cache = cacheRef.current;
-        cache.set(key, url);
-        while (cache.size > CACHE_CAP) {
-          const oldest = cache.keys().next().value;
-          if (oldest === undefined) break;
-          cache.delete(oldest);
+        const viewport = pdfPage.getViewport({ scale: scale * dpr });
+        ctx.clearRect(0, 0, backingW, backingH);
+        const renderTask = pdfPage.render({ canvasContext: ctx, viewport });
+        task = renderTask;
+        await renderTask.promise;
+        if (seq !== renderSeq.current) return;
+        // Cache the rendered frame as an ImageBitmap (GPU-transferable).
+        const bitmap = await createImageBitmap(canvas);
+        if (seq !== renderSeq.current) {
+          bitmap.close();
+          return;
         }
-        setDataUrl(url);
-      } catch (e) {
+        const cache = cacheRef.current;
+        cache.set(key, bitmap);
+        while (cache.size > CACHE_CAP) {
+          const oldestKey = cache.keys().next().value;
+          if (oldestKey === undefined) break;
+          const victim = cache.get(oldestKey);
+          cache.delete(oldestKey);
+          victim?.close();
+        }
+      } catch (e: unknown) {
         if (seq !== renderSeq.current) return;
-        setRenderError(e instanceof Error ? e.message : "Render failed");
+        // PDF.js throws a "RenderingCancelledException" when a previous
+        // render is superseded — that's expected, not a user-facing error.
+        const msg = e instanceof Error ? e.message : String(e);
+        if (/cancelled/i.test(msg)) return;
+        setRenderError(msg);
       }
     })();
-  }, [pdfBytes, page, scale, nativeWidth]);
+
+    return () => {
+      task?.cancel();
+    };
+  }, [ready, page, scale, nativeWidth, nativeHeight]);
 
   useEffect(() => {
     if (pageCount < 2) return;
@@ -170,6 +229,15 @@ export function PDFViewer({ blob, onDownload }: PDFViewerProps) {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [pageCount]);
+
+  // Free cached bitmaps on unmount.
+  useEffect(() => {
+    const cache = cacheRef.current;
+    return () => {
+      for (const bmp of cache.values()) bmp.close();
+      cache.clear();
+    };
+  }, []);
 
   const handleZoomIn = () => {
     setUserZoom(true);
@@ -298,31 +366,30 @@ export function PDFViewer({ blob, onDownload }: PDFViewerProps) {
           >
             {renderError}
           </div>
-        ) : dataUrl ? (
-          <img
-            src={dataUrl}
-            alt={`Page ${page}`}
+        ) : (
+          <canvas
+            ref={canvasRef}
+            aria-label={`Page ${page}`}
             style={{
               display: "block",
-              // In fit mode, cap the image CSS-wise so intrinsic PNG pixel
-              // dimensions can never overflow the container. In user-zoom
-              // mode, let natural size drive so scroll works.
+              // In fit mode, CSS-cap so the canvas can never overflow the
+              // container even by a pixel. In user-zoom mode, let natural
+              // size drive so scroll works.
               maxWidth: userZoom ? "none" : "100%",
               maxHeight: userZoom ? "none" : "100%",
-              width: "auto",
-              height: "auto",
               boxShadow: tokens.shadowMd,
               background: "#fff",
             }}
           />
-        ) : (
+        )}
+        {!ready && !renderError && (
           <div
             className="collateral-preview-dots"
             style={{
+              position: "absolute",
               color: tokens.textSecondary,
               fontSize: tokens.textSm,
               padding: "1.5rem",
-              textAlign: "center",
             }}
             aria-label="Rendering"
           >
