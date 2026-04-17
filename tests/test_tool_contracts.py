@@ -462,6 +462,57 @@ class TestExportResourceTemplate:
         assert load_export("exp_missing", "pdf") is None
 
 
+class TestAssetResourceTemplate:
+    """The collateral://assets/{filename} resource template works."""
+
+    def test_asset_resource_returns_bytes_and_mime(self, workspace: Workspace) -> None:
+        del workspace
+        from mcp_collateral import server, store
+
+        store.ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+        (store.ASSETS_DIR / "headshot.png").write_bytes(b"\x89PNG\r\n\x1a\nfakebytes")
+
+        result = server.collateral_asset("headshot.png")
+        assert len(result.contents) == 1
+        content = result.contents[0]
+        assert content.mime_type == "image/png"
+        assert content.content.startswith(b"\x89PNG")
+
+    def test_asset_resource_mime_per_extension(self, workspace: Workspace) -> None:
+        del workspace
+        from mcp_collateral import server, store
+
+        store.ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+        cases = {
+            "brand.jpg": "image/jpeg",
+            "logo.svg": "image/svg+xml",
+            "notes.md": "text/markdown",
+            "random.bin": "application/octet-stream",
+        }
+        for filename, expected_mime in cases.items():
+            (store.ASSETS_DIR / filename).write_bytes(b"payload")
+            result = server.collateral_asset(filename)
+            assert result.contents[0].mime_type == expected_mime, filename
+
+    def test_asset_resource_missing_returns_empty(self, workspace: Workspace) -> None:
+        del workspace
+        from mcp_collateral import server
+
+        result = server.collateral_asset("does-not-exist.png")
+        assert len(result.contents) == 1
+        assert result.contents[0].content == b""
+
+    def test_asset_resource_refuses_directory(self, workspace: Workspace) -> None:
+        del workspace
+        from mcp_collateral import server, store
+
+        store.ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+        (store.ASSETS_DIR / "a-folder").mkdir(exist_ok=True)
+
+        result = server.collateral_asset("a-folder")
+        assert result.contents[0].content == b""
+
+
 # ---------------------------------------------------------------------------
 # Auto-save contract
 # ---------------------------------------------------------------------------

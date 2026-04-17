@@ -19,7 +19,8 @@ from fastmcp.tools import ToolResult
 from mcp.types import Annotations, ResourceLink, TextContent
 from pydantic import AnyUrl
 
-from . import store, templates as template_mod
+from . import store
+from . import templates as template_mod
 from .models import (
     DocumentInfo,
     TemplateInfo,
@@ -44,6 +45,7 @@ _EXT_MIME: dict[str, str] = {
 def _mime_for(filename: str) -> str:
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     return _EXT_MIME.get(ext, "application/octet-stream")
+
 
 _USER_ONLY = Annotations(audience=["user"])
 
