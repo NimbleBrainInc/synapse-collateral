@@ -75,7 +75,6 @@ class TestPatchSource:
         with pytest.raises(ValueError, match="not found"):
             workspace.patch_source("MISSING TEXT", "replacement")
 
-
     def test_patch_not_found_includes_source_context(self, workspace: Workspace) -> None:
         workspace.create_document("Test")
         workspace.set_source("= Hello World\nSome text here.")

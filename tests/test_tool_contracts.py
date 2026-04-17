@@ -13,11 +13,10 @@ import base64
 from pathlib import Path
 
 import pytest
+import pytest_asyncio
 
 from mcp_collateral.models import (
     DocumentInfo,
-    ExportResult,
-    PreviewResult,
     TemplateInfo,
     WorkspaceState,
 )
@@ -299,37 +298,230 @@ class TestFontContracts:
 
 
 # ---------------------------------------------------------------------------
-# Rendering contracts
+# Rendering contracts — MCP-spec resource_link tool returns
 # ---------------------------------------------------------------------------
 
 
+@pytest_asyncio.fixture()
+async def mcp_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Spin up the FastMCP server in-process with isolated storage."""
+    monkeypatch.setattr("mcp_collateral.store.BASE_DIR", tmp_path)
+    monkeypatch.setattr("mcp_collateral.store.ASSETS_DIR", tmp_path / "assets")
+    monkeypatch.setattr("mcp_collateral.store.FONTS_DIR", tmp_path / "fonts")
+    monkeypatch.setattr("mcp_collateral.store.TEMPLATES_DIR", tmp_path / "templates")
+    monkeypatch.setattr("mcp_collateral.store.DOCUMENTS_DIR", tmp_path / "documents")
+    monkeypatch.setattr("mcp_collateral.store.COMPILE_DIR", tmp_path / "_compile")
+
+    import mcp_collateral.templates as tmod
+
+    monkeypatch.setattr(tmod, "_seeded", False)
+
+    from mcp_collateral import server as server_mod
+    from mcp_collateral import store
+
+    store._ensure_dirs()
+    store.seed_templates()
+
+    # Replace the module-level workspace so tools use isolated storage.
+    monkeypatch.setattr(server_mod, "_ws", Workspace())
+
+    from fastmcp import Client
+
+    async with Client(server_mod.mcp) as client:
+        yield client
+
+
+def _result_byte_size(result) -> int:
+    """Estimate on-the-wire size of a CallToolResult's content."""
+    total = 0
+    for block in result.content:
+        # block is a pydantic model; use json dump length as a proxy
+        total += len(block.model_dump_json())
+    return total
+
+
+@pytest.mark.asyncio
 class TestRenderingContracts:
-    """preview -> PreviewResult, export_pdf -> ExportResult."""
+    """Preview/export tools return small results with resource_link blocks."""
 
-    def test_preview_returns_preview_result(self, workspace: Workspace) -> None:
-        workspace.create_document("Test")
-        result = workspace.preview()
-        assert isinstance(result, PreviewResult)
-        assert isinstance(result.pages, list)
-        assert isinstance(result.page_count, int)
+    async def test_preview_returns_pdf_resource_link(self, mcp_client) -> None:
+        await mcp_client.call_tool("create_document", {"name": "Preview Doc"})
+        result = await mcp_client.call_tool("preview", {})
 
-    def test_preview_with_images_has_base64(self, workspace: Workspace) -> None:
-        workspace.create_document("Test")
-        result = workspace.preview(include_images=True)
-        assert result.pages[0].image_base64 is not None
-        assert isinstance(result.pages[0].image_base64, str)
+        assert _result_byte_size(result) < 10_000
 
-    def test_export_pdf_returns_export_result(self, workspace: Workspace) -> None:
-        workspace.create_document("Test")
-        result = workspace.export_pdf()
-        assert isinstance(result, ExportResult)
-        assert result.size_bytes > 0
+        links = [b for b in result.content if getattr(b, "type", None) == "resource_link"]
+        assert len(links) == 1
+        link = links[0]
+        assert str(link.uri).startswith("collateral://exports/")
+        assert str(link.uri).endswith(".pdf")
+        assert link.mimeType == "application/pdf"
 
-    def test_export_pdf_with_data_has_base64(self, workspace: Workspace) -> None:
-        workspace.create_document("Test")
-        result = workspace.export_pdf(include_data=True)
-        assert result.pdf_base64 is not None
-        assert isinstance(result.pdf_base64, str)
+        for b in result.content:
+            dumped = b.model_dump_json()
+            assert len(dumped) < 2_000, "no block should inline large bytes"
+
+        data = result.structured_content
+        assert data is not None
+        assert data["mime_type"] == "application/pdf"
+        assert data["size_bytes"] > 0
+        assert data["export_id"].startswith("exp_")
+
+    async def test_preview_resource_link_fetches_pdf(self, mcp_client) -> None:
+        await mcp_client.call_tool("create_document", {"name": "Fetch Doc"})
+        result = await mcp_client.call_tool("preview", {})
+        link = next(b for b in result.content if getattr(b, "type", None) == "resource_link")
+
+        contents = await mcp_client.read_resource(str(link.uri))
+        assert contents, "resources/read must return content"
+        import base64 as _b64
+
+        first = contents[0]
+        raw = _b64.b64decode(first.blob) if hasattr(first, "blob") else first.text.encode()
+        assert raw.startswith(b"%PDF")
+
+    async def test_preview_template_returns_pdf_resource_link(self, mcp_client) -> None:
+        templates_result = await mcp_client.call_tool("list_templates", {})
+        templates = templates_result.structured_content
+        tlist = (
+            templates["result"]
+            if isinstance(templates, dict) and "result" in templates
+            else templates
+        )
+        if not tlist:
+            pytest.skip("No seed templates available")
+        tid = tlist[0]["id"]
+
+        result = await mcp_client.call_tool("preview_template", {"template_id": tid})
+        assert _result_byte_size(result) < 10_000
+        links = [b for b in result.content if getattr(b, "type", None) == "resource_link"]
+        assert len(links) == 1
+        link = links[0]
+        assert str(link.uri).startswith("collateral://exports/")
+        assert link.mimeType == "application/pdf"
+
+    async def test_export_pdf_returns_resource_link(self, mcp_client) -> None:
+        await mcp_client.call_tool("create_document", {"name": "Export Doc"})
+        result = await mcp_client.call_tool("export_pdf", {})
+
+        assert _result_byte_size(result) < 10_000
+
+        links = [b for b in result.content if getattr(b, "type", None) == "resource_link"]
+        assert len(links) == 1
+        link = links[0]
+        assert str(link.uri).startswith("collateral://exports/")
+        assert str(link.uri).endswith(".pdf")
+        assert link.mimeType == "application/pdf"
+
+        data = result.structured_content
+        assert data is not None
+        assert data["mime_type"] == "application/pdf"
+        assert data["size_bytes"] > 0
+        assert data["export_id"].startswith("exp_")
+
+    async def test_export_pdf_resource_link_fetches_pdf(self, mcp_client) -> None:
+        await mcp_client.call_tool("create_document", {"name": "Fetch PDF"})
+        result = await mcp_client.call_tool("export_pdf", {})
+        link = next(b for b in result.content if getattr(b, "type", None) == "resource_link")
+
+        contents = await mcp_client.read_resource(str(link.uri))
+        assert contents
+        import base64 as _b64
+
+        first = contents[0]
+        raw = _b64.b64decode(first.blob) if hasattr(first, "blob") else first.text.encode()
+        assert raw.startswith(b"%PDF")
+
+    async def test_compile_typst_returns_resource_link(self, mcp_client) -> None:
+        source = '#set page(paper: "us-letter")\n= Hello\nWorld.'
+        result = await mcp_client.call_tool("compile_typst", {"source": source})
+        assert _result_byte_size(result) < 10_000
+        links = [b for b in result.content if getattr(b, "type", None) == "resource_link"]
+        assert len(links) == 1
+        assert links[0].mimeType == "application/pdf"
+
+
+class TestExportResourceTemplate:
+    """The collateral://exports/{export_id}.{ext} resource template works."""
+
+    def test_store_and_load_export_roundtrip(self, workspace: Workspace, tmp_path: Path) -> None:
+        # Unused workspace fixture just isolates store.BASE_DIR.
+        del workspace
+
+        from mcp_collateral.workspace import load_export, store_export
+
+        export_id, path = store_export(b"hello bytes", "pdf")
+        assert path.exists()
+        assert export_id.startswith("exp_")
+        assert load_export(export_id, "pdf") == b"hello bytes"
+
+    def test_load_export_missing_returns_none(self, workspace: Workspace) -> None:
+        del workspace
+        from mcp_collateral.workspace import load_export
+
+        assert load_export("exp_missing", "pdf") is None
+
+
+class TestAssetResourceTemplate:
+    """The collateral://assets/{filename} resource template works."""
+
+    def test_asset_resource_returns_bytes_and_mime(self, workspace: Workspace) -> None:
+        del workspace
+        from mcp_collateral import server, store
+
+        store.ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+        (store.ASSETS_DIR / "headshot.png").write_bytes(b"\x89PNG\r\n\x1a\nfakebytes")
+
+        result = server.collateral_asset("headshot.png")
+        assert len(result.contents) == 1
+        content = result.contents[0]
+        assert content.mime_type == "image/png"
+        assert content.content.startswith(b"\x89PNG")
+
+    def test_asset_resource_mime_per_extension(self, workspace: Workspace) -> None:
+        del workspace
+        from mcp_collateral import server, store
+
+        store.ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+        cases = {
+            "brand.jpg": "image/jpeg",
+            "logo.svg": "image/svg+xml",
+            "notes.md": "text/markdown",
+            "random.bin": "application/octet-stream",
+        }
+        for filename, expected_mime in cases.items():
+            (store.ASSETS_DIR / filename).write_bytes(b"payload")
+            result = server.collateral_asset(filename)
+            assert result.contents[0].mime_type == expected_mime, filename
+
+    def test_asset_resource_missing_returns_empty(self, workspace: Workspace) -> None:
+        del workspace
+        from mcp_collateral import server
+
+        result = server.collateral_asset("does-not-exist.png")
+        assert len(result.contents) == 1
+        assert result.contents[0].content == b""
+
+    def test_asset_resource_refuses_directory(self, workspace: Workspace) -> None:
+        del workspace
+        from mcp_collateral import server, store
+
+        store.ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+        (store.ASSETS_DIR / "a-folder").mkdir(exist_ok=True)
+
+        result = server.collateral_asset("a-folder")
+        assert result.contents[0].content == b""
+
+    def test_asset_resource_rejects_path_traversal(self, workspace: Workspace) -> None:
+        del workspace
+        from mcp_collateral import server
+
+        # Classic dot-dot escape
+        assert server.collateral_asset("../../../etc/passwd").contents[0].content == b""
+        # Nested dot-dot mid-path
+        assert server.collateral_asset("sub/../../etc/passwd").contents[0].content == b""
+        # Absolute path
+        assert server.collateral_asset("/etc/passwd").contents[0].content == b""
 
 
 # ---------------------------------------------------------------------------

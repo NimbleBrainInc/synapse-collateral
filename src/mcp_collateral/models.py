@@ -73,25 +73,3 @@ class WorkspaceState(BaseModel):
     document_name: str | None = None
     template_id: str | None = None
     theme: ThemeData = Field(default_factory=ThemeData)
-
-
-# --- Rendering ---
-
-
-class PagePreview(BaseModel):
-    page_number: int
-    image_base64: str | None = None
-
-
-class PreviewResult(BaseModel):
-    pages: list[PagePreview] = Field(default_factory=list)
-    page_count: int = 0
-    message: str = ""
-
-
-class ExportResult(BaseModel):
-    pdf_base64: str | None = None
-    filename: str = "document.pdf"
-    page_count: int = 0
-    size_bytes: int = 0
-    message: str = ""

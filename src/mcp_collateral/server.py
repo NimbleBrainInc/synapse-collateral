@@ -14,17 +14,38 @@ from pathlib import Path
 from typing import Any
 
 from fastmcp import FastMCP
-from mcp.types import Annotations, ImageContent, TextContent
+from fastmcp.resources import ResourceContent, ResourceResult
+from fastmcp.tools import ToolResult
+from mcp.types import Annotations, ResourceLink, TextContent
+from pydantic import AnyUrl
 
+from . import store
 from . import templates as template_mod
 from .models import (
     DocumentInfo,
-    ExportResult,
-    PreviewResult,
     TemplateInfo,
     WorkspaceState,
 )
-from .workspace import Workspace
+from .workspace import Workspace, load_export, store_export
+
+_EXT_MIME: dict[str, str] = {
+    "pdf": "application/pdf",
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "gif": "image/gif",
+    "webp": "image/webp",
+    "svg": "image/svg+xml",
+    "txt": "text/plain",
+    "md": "text/markdown",
+    "json": "application/json",
+}
+
+
+def _mime_for(filename: str) -> str:
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    return _EXT_MIME.get(ext, "application/octet-stream")
+
 
 _USER_ONLY = Annotations(audience=["user"])
 
@@ -111,6 +132,35 @@ def collateral_preview() -> bytes:
     if not pdf_path.exists():
         return b""
     return pdf_path.read_bytes()
+
+
+@mcp.resource("collateral://exports/{export_id}.{ext}")
+def collateral_export(export_id: str, ext: str) -> ResourceResult:
+    """Rendered export (PDF or PNG) addressable by id. MIME is set per extension."""
+    data = load_export(export_id, ext) or b""
+    mime_type = _EXT_MIME.get(ext.lower(), "application/octet-stream")
+    return ResourceResult([ResourceContent(data, mime_type=mime_type)])
+
+
+@mcp.resource("collateral://assets/{filename}")
+def collateral_asset(filename: str) -> ResourceResult:
+    """Uploaded asset bytes, addressable by filename under ~/.collateral/assets/.
+
+    Uploads pass through _validate_filename in store.py, but this handler is
+    a separate trust boundary (resources can be read by anyone with the URI,
+    not just whoever uploaded) so it re-enforces containment by resolving
+    the path and rejecting anything outside ASSETS_DIR.
+    """
+    empty = ResourceResult([ResourceContent(b"", mime_type="application/octet-stream")])
+    assets_root = store.ASSETS_DIR.resolve()
+    try:
+        candidate = (store.ASSETS_DIR / filename).resolve()
+        candidate.relative_to(assets_root)
+    except (ValueError, OSError):
+        return empty
+    if not candidate.is_file():
+        return empty
+    return ResourceResult([ResourceContent(candidate.read_bytes(), mime_type=_mime_for(filename))])
 
 
 # --- 1-2. Theme ---
@@ -506,97 +556,101 @@ async def install_font(
 # --- Rendering helpers ---
 
 
-def _preview_result_to_content_blocks(
-    result: PreviewResult,
-) -> list[TextContent | ImageContent]:
-    """Convert a PreviewResult to MCP content blocks with audience annotations.
+def _render_pdf(pdf_bytes: bytes, summary_name: str) -> ToolResult:
+    size = len(pdf_bytes)
+    # Typst emits one /Page object per page; /Pages is the catalog node.
+    page_count = pdf_bytes.count(b"/Type /Page") - pdf_bytes.count(b"/Type /Pages")
+    if page_count < 1:
+        page_count = 1
 
-    The text summary goes to both model and user. Each page image is
-    annotated as user-only so base64 data stays out of the LLM context.
-    """
-    blocks: list[TextContent | ImageContent] = [
-        TextContent(type="text", text=f"Preview rendered ({result.page_count} pages)"),
-    ]
-    for page in result.pages:
-        if page.image_base64:
-            blocks.append(
-                ImageContent(
-                    type="image",
-                    data=page.image_base64,
-                    mimeType="image/png",
-                    annotations=_USER_ONLY,
-                ),
-            )
-    return blocks
+    export_id, _ = store_export(pdf_bytes, "pdf")
+    link = ResourceLink(
+        type="resource_link",
+        uri=AnyUrl(f"collateral://exports/{export_id}.pdf"),
+        name=summary_name,
+        mimeType="application/pdf",
+        description=f"{summary_name} ({page_count} pages, {size // 1024 or 1}KB)",
+        annotations=_USER_ONLY,
+    )
+
+    summary = f"{summary_name}: {page_count} page{'s' if page_count != 1 else ''}, {size} bytes"
+    structured = {
+        "export_id": export_id,
+        "page_count": page_count,
+        "size_bytes": size,
+        "mime_type": "application/pdf",
+    }
+    return ToolResult(
+        content=[TextContent(type="text", text=summary), link],
+        structured_content=structured,
+    )
 
 
 # --- 25-27. Rendering ---
 
 
 @mcp.tool()
-async def preview(page: int | None = None) -> list[TextContent | ImageContent]:
-    """Render the current document to PNG preview images.
+async def preview(page: int | None = None) -> ToolResult:
+    """Render the current document to a PDF preview.
 
-    Returns a text summary (for the model) and image blocks (for the user).
+    Returns a text summary and a resource_link to the PDF at
+    ``collateral://exports/<id>.pdf``. Clients read via ``resources/read``
+    and render with a native PDF viewer.
 
     Args:
-        page: Optional page number (1-based) for single-page render.
+        page: Optional page number (1-based) for a single-page preview.
     """
-    result = _ws.preview(page=page, include_images=True)
-    return _preview_result_to_content_blocks(result)
+    from . import compiler
+
+    if page is not None:
+        pdf_bytes = compiler.compile_source(_ws.source, _ws.logo_data, page=page)
+        return _render_pdf(pdf_bytes, f"Preview of {_ws.document_name} (page {page})")
+
+    if _ws._cached_pdf is None:
+        _ws._cached_pdf = compiler.compile_source(_ws.source, _ws.logo_data)
+    return _render_pdf(_ws._cached_pdf, f"Preview of {_ws.document_name}")
 
 
 @mcp.tool()
-async def preview_template(template_id: str) -> list[TextContent | ImageContent]:
+async def preview_template(template_id: str) -> ToolResult:
     """Preview a template without creating a document.
 
-    Compiles and renders the template source directly. Does not modify
-    the workspace or create any files on disk. Returns a text summary
-    (for the model) and image blocks (for the user).
+    Compiles the template source to PDF. Does not modify workspace state.
 
     Args:
         template_id: Template identifier (e.g., "proposal", "lead-magnet").
     """
-    result = _ws.preview_template(template_id, include_images=True)
-    return _preview_result_to_content_blocks(result)
+    from . import compiler
+
+    source = template_mod.get_source(template_id)
+    pdf_bytes = compiler.compile_source(source, {})
+    return _render_pdf(pdf_bytes, f"Template preview: {template_id}")
 
 
 @mcp.tool()
-async def export_pdf(include_data: bool = False) -> list[TextContent | ImageContent]:
-    """Export the current document as a final PDF. Cached if unchanged.
+async def export_pdf() -> ToolResult:
+    """Export the current document as a PDF.
 
-    Returns a text summary (for the model). When include_data is true,
-    also returns the base64 PDF as user-only content.
-
-    Args:
-        include_data: Include base64 PDF data in the response (for download).
+    Returns a text summary and a resource_link to ``collateral://exports/<id>.pdf``.
     """
-    result = _ws.export_pdf(include_data=include_data)
-    blocks: list[TextContent | ImageContent] = [
-        TextContent(
-            type="text",
-            text=f"Exported {result.filename} ({result.page_count} pages, {result.size_bytes} bytes)",
-        ),
-    ]
-    if result.pdf_base64:
-        blocks.append(
-            TextContent(
-                type="text",
-                text=result.pdf_base64,
-                annotations=_USER_ONLY,
-            ),
-        )
-    return blocks
+    if _ws._cached_pdf is None:
+        from . import compiler
+
+        _ws._cached_pdf = compiler.compile_source(_ws.source, _ws.logo_data)
+    return _render_pdf(_ws._cached_pdf, f"Export of {_ws.document_name}")
 
 
 @mcp.tool()
-async def compile_typst(source: str) -> ExportResult:
+async def compile_typst(source: str) -> ToolResult:
     """Compile raw Typst source to PDF. Bypasses workspace entirely.
 
     Args:
         source: Raw Typst source code.
     """
-    return _ws.compile_typst(source)
+    from . import compiler
+
+    pdf_bytes = compiler.compile_source(source)
+    return _render_pdf(pdf_bytes, "Compiled Typst document")
 
 
 # ---------------------------------------------------------------------------
