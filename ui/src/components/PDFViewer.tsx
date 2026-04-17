@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 // unpdf ships a serverless PDF.js build with the worker inlined, so no
 // separate worker file is needed in the browser.
 import { getDocumentProxy, renderPageAsImage } from "unpdf";
-import { useThemeTokens } from "../theme-utils";
+import { tokens } from "../styles";
 
 interface PDFViewerProps {
   blob: Blob;
@@ -22,7 +22,6 @@ function cacheKey(page: number, scale: number) {
 }
 
 export function PDFViewer({ blob, onDownload }: PDFViewerProps) {
-  const { t } = useThemeTokens();
   const bodyRef = useRef<HTMLDivElement | null>(null);
 
   // Immutable snapshot of the PDF bytes. unpdf transfers the underlying buffer,
@@ -40,7 +39,6 @@ export function PDFViewer({ blob, onDownload }: PDFViewerProps) {
   const cacheRef = useRef<PageCache>(new Map());
   const renderSeq = useRef(0);
 
-  // Load document when blob changes.
   useEffect(() => {
     let cancelled = false;
     setPdfBytes(null);
@@ -58,7 +56,6 @@ export function PDFViewer({ blob, onDownload }: PDFViewerProps) {
       try {
         const buf = new Uint8Array(await blob.arrayBuffer());
         if (cancelled) return;
-        // Clone for getDocumentProxy so we keep an untouched copy for renders.
         const doc = await getDocumentProxy(new Uint8Array(buf));
         if (cancelled) return;
         setPageCount(doc.numPages);
@@ -79,23 +76,19 @@ export function PDFViewer({ blob, onDownload }: PDFViewerProps) {
     };
   }, [blob]);
 
-  // Compute fit-to-height scale based on body height vs. native page height.
   const recomputeFitScale = useCallback(() => {
     if (!nativeHeight || !bodyRef.current) return;
     const ch = bodyRef.current.clientHeight;
     if (ch <= 0) return;
-    // Leave a small gutter so the image doesn't touch the scrollbar edge.
     const target = Math.max(0.1, (ch - 16) / nativeHeight);
     setScale(Math.min(MAX_SCALE, Math.max(MIN_SCALE, target)));
   }, [nativeHeight]);
 
-  // Recompute fit scale on first layout after native dimensions resolve.
   useLayoutEffect(() => {
     if (userZoom) return;
     recomputeFitScale();
   }, [nativeHeight, userZoom, recomputeFitScale]);
 
-  // Observe container resizes and rescale to fit width (until user zooms).
   useEffect(() => {
     const el = bodyRef.current;
     if (!el) return;
@@ -107,8 +100,6 @@ export function PDFViewer({ blob, onDownload }: PDFViewerProps) {
     return () => ro.disconnect();
   }, [userZoom, recomputeFitScale]);
 
-  // Render current page at current scale. Uses a per-blob cache keyed by
-  // (page, scale) to make zoom repeats instant.
   useEffect(() => {
     if (!pdfBytes || !nativeWidth) return;
     const key = cacheKey(page, scale);
@@ -127,7 +118,6 @@ export function PDFViewer({ blob, onDownload }: PDFViewerProps) {
         if (seq !== renderSeq.current) return;
         const cache = cacheRef.current;
         cache.set(key, url);
-        // Cap the cache. Delete oldest entries first (insertion-ordered).
         while (cache.size > CACHE_CAP) {
           const oldest = cache.keys().next().value;
           if (oldest === undefined) break;
@@ -141,7 +131,6 @@ export function PDFViewer({ blob, onDownload }: PDFViewerProps) {
     })();
   }, [pdfBytes, page, scale, nativeWidth]);
 
-  // Keyboard nav for multi-page docs.
   useEffect(() => {
     if (pageCount < 2) return;
     const handler = (e: KeyboardEvent) => {
@@ -174,10 +163,6 @@ export function PDFViewer({ blob, onDownload }: PDFViewerProps) {
 
   const zoomPct = useMemo(() => `${Math.round(scale * 100)}%`, [scale]);
 
-  const border = t("border", "#e5e7eb");
-  const muted = t("muted", "#6b7280");
-  const surface = t("secondary", "#f3f4f6");
-
   return (
     <div
       className="collateral-pdf-viewer"
@@ -189,15 +174,18 @@ export function PDFViewer({ blob, onDownload }: PDFViewerProps) {
       }}
     >
       <div
+        className="collateral-pdf-toolbar"
         style={{
           display: "flex",
           alignItems: "center",
-          gap: "0.25rem",
-          padding: "0.3rem 0.5rem",
-          borderBottom: `1px solid ${border}`,
-          color: muted,
-          fontSize: "0.72rem",
+          gap: "0.35rem",
+          padding: "0.5rem 0.75rem",
+          borderBottom: `1px solid ${tokens.borderPrimary}`,
+          color: tokens.textSecondary,
+          fontSize: tokens.textSm,
+          lineHeight: tokens.textSmLh,
           flexShrink: 0,
+          background: tokens.bgSecondary,
         }}
       >
         <button
@@ -207,7 +195,9 @@ export function PDFViewer({ blob, onDownload }: PDFViewerProps) {
           disabled={scale <= MIN_SCALE + 1e-6}
           aria-label="Zoom out"
         >
-          −
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
         </button>
         <span className="collateral-pdf-viewer-zoomlabel" aria-live="polite">
           {zoomPct}
@@ -219,7 +209,10 @@ export function PDFViewer({ blob, onDownload }: PDFViewerProps) {
           disabled={scale >= MAX_SCALE - 1e-6}
           aria-label="Zoom in"
         >
-          +
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
         </button>
         <button
           type="button"
@@ -236,19 +229,11 @@ export function PDFViewer({ blob, onDownload }: PDFViewerProps) {
             onClick={() => void onDownload()}
             aria-label="Download PDF"
             className="collateral-pdf-viewer-btn collateral-pdf-viewer-download"
-            style={{
-              marginLeft: "auto",
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 24,
-              height: 24,
-              color: muted,
-            }}
+            style={{ marginLeft: "auto" }}
           >
             <svg
-              width="13"
-              height="13"
+              width="16"
+              height="16"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -267,22 +252,23 @@ export function PDFViewer({ blob, onDownload }: PDFViewerProps) {
 
       <div
         ref={bodyRef}
+        className="collateral-pdf-body"
         style={{
           flex: 1,
           minHeight: 0,
           overflow: "auto",
-          background: surface,
+          background: tokens.bgTertiary,
           display: "flex",
           alignItems: "flex-start",
           justifyContent: "center",
-          padding: "0.5rem",
+          padding: "0.75rem",
         }}
       >
         {renderError ? (
           <div
             style={{
-              color: t("destructive", "#ef4444"),
-              fontSize: "0.82rem",
+              color: tokens.danger,
+              fontSize: tokens.textSm,
               padding: "1.5rem",
               textAlign: "center",
             }}
@@ -297,7 +283,7 @@ export function PDFViewer({ blob, onDownload }: PDFViewerProps) {
               display: "block",
               maxWidth: "none",
               height: "auto",
-              boxShadow: "0 1px 3px rgba(15, 23, 42, 0.08), 0 4px 12px rgba(15, 23, 42, 0.08)",
+              boxShadow: tokens.shadowMd,
               background: "#fff",
             }}
           />
@@ -305,8 +291,8 @@ export function PDFViewer({ blob, onDownload }: PDFViewerProps) {
           <div
             className="collateral-preview-dots"
             style={{
-              color: muted,
-              fontSize: "0.82rem",
+              color: tokens.textSecondary,
+              fontSize: tokens.textSm,
               padding: "1.5rem",
               textAlign: "center",
             }}
@@ -321,16 +307,18 @@ export function PDFViewer({ blob, onDownload }: PDFViewerProps) {
 
       {pageCount > 1 && (
         <div
+          className="collateral-pdf-pager"
           style={{
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             gap: "0.5rem",
-            padding: "0.3rem 0.5rem",
-            borderTop: `1px solid ${border}`,
-            color: muted,
-            fontSize: "0.72rem",
+            padding: "0.4rem 0.75rem",
+            borderTop: `1px solid ${tokens.borderPrimary}`,
+            color: tokens.textSecondary,
+            fontSize: tokens.textSm,
             flexShrink: 0,
+            background: tokens.bgSecondary,
           }}
         >
           <button
@@ -342,7 +330,7 @@ export function PDFViewer({ blob, onDownload }: PDFViewerProps) {
           >
             ‹
           </button>
-          <span style={{ minWidth: "6ch", textAlign: "center" }}>
+          <span style={{ minWidth: "7ch", textAlign: "center" }}>
             Page {page} of {pageCount}
           </span>
           <button

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useDataSync } from "@nimblebrain/synapse/react";
-import { s } from "./styles";
-import { useInjectThemeTokens, useThemeTokens } from "./theme-utils";
+import { s, tokens } from "./styles";
+import { useInjectThemeTokens } from "./theme-utils";
 import { injectResponsiveStyles } from "./styles/responsive";
 import { TopNav } from "./components/TopNav";
 import type { Tab, SaveStatus } from "./components/TopNav";
@@ -25,7 +25,6 @@ type DialogType =
 
 export function App() {
   useInjectThemeTokens();
-  const { t } = useThemeTokens();
   const [tab, setTab] = useState<Tab>("documents");
 
   const {
@@ -70,14 +69,11 @@ export function App() {
     injectResponsiveStyles();
   }, []);
 
-  // Load list for the active tab when it changes.
   useEffect(() => {
     if (tab === "templates") refreshTemplates();
     else refreshDocs();
   }, [tab, refreshDocs, refreshTemplates]);
 
-  // Auto-refresh when the agent changes data. Document previews refresh live;
-  // template previews are static snapshots.
   useDataSync(() => {
     if (tab === "templates") refreshTemplates();
     if (tab === "documents") {
@@ -236,13 +232,7 @@ export function App() {
   };
 
   return (
-    <div
-      style={{
-        ...s.root,
-        background: t("background", "#fff"),
-        color: t("foreground", "#1a1a1a"),
-      }}
-    >
+    <div className="collateral-root" style={s.root}>
       <TopNav
         tab={tab}
         onTabChange={setTab}
@@ -293,9 +283,9 @@ export function App() {
 
       {dialogType === "newDoc" && (
         <Dialog onClose={() => setDialogType(null)}>
-          <h3 style={{ fontSize: "1rem", marginBottom: "1rem" }}>New Document</h3>
+          <h3 style={s.dialogTitle}>New Document</h3>
           <label style={s.label}>
-            Name <span style={{ color: t("destructive", "#ef4444") }}>*</span>
+            Name <span style={{ color: tokens.danger }}>*</span>
           </label>
           <input
             type="text"
@@ -305,21 +295,14 @@ export function App() {
             placeholder="e.g. Acme Proposal Q2"
             autoFocus
             required
-            style={{
-              ...s.input,
-              borderColor: t("border", "#e5e7eb"),
-              background: t("card", "#f9fafb"),
-            }}
+            style={s.input}
           />
           <label style={{ ...s.label, marginTop: "0.75rem" }}>Template</label>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
             <label
               style={{
                 ...s.templateOpt,
-                borderColor: !dialogTemplate
-                  ? t("primary", "#2563eb")
-                  : t("border", "#e5e7eb"),
-                background: t("card", "#f9fafb"),
+                ...(!dialogTemplate ? s.templateOptActive : {}),
               }}
               onClick={() => setDialogTemplate("")}
             >
@@ -328,7 +311,7 @@ export function App() {
                 name="tpl"
                 checked={!dialogTemplate}
                 readOnly
-                style={{ accentColor: t("primary", "#2563eb") }}
+                style={{ accentColor: tokens.textAccent }}
               />{" "}
               Blank document
             </label>
@@ -337,11 +320,7 @@ export function App() {
                 key={tpl.id}
                 style={{
                   ...s.templateOpt,
-                  borderColor:
-                    dialogTemplate === tpl.id
-                      ? t("primary", "#2563eb")
-                      : t("border", "#e5e7eb"),
-                  background: t("card", "#f9fafb"),
+                  ...(dialogTemplate === tpl.id ? s.templateOptActive : {}),
                 }}
                 onClick={() => setDialogTemplate(tpl.id)}
               >
@@ -350,28 +329,21 @@ export function App() {
                   name="tpl"
                   checked={dialogTemplate === tpl.id}
                   readOnly
-                  style={{ accentColor: t("primary", "#2563eb") }}
+                  style={{ accentColor: tokens.textAccent }}
                 />{" "}
                 {tpl.name}
               </label>
             ))}
           </div>
-          <div
-            style={{
-              display: "flex",
-              gap: "0.5rem",
-              justifyContent: "flex-end",
-              marginTop: "1.25rem",
-            }}
-          >
+          <div className="collateral-dialog-actions">
             <button
-              style={{ ...s.btn, ...s.btnGhost, borderColor: t("border", "#e5e7eb") }}
+              style={{ ...s.btn, ...s.btnGhost }}
               onClick={() => setDialogType(null)}
             >
               Cancel
             </button>
             <button
-              style={{ ...s.btn, ...s.btnPrimary, background: t("primary", "#2563eb") }}
+              style={{ ...s.btn, ...s.btnPrimary }}
               onClick={handleCreateDocument}
               disabled={!dialogName.trim()}
             >
@@ -383,7 +355,7 @@ export function App() {
 
       {dialogType === "newTemplate" && (
         <Dialog onClose={() => setDialogType(null)}>
-          <h3 style={{ fontSize: "1rem", marginBottom: "1rem" }}>New Template</h3>
+          <h3 style={s.dialogTitle}>New Template</h3>
           <label style={s.label}>Name</label>
           <input
             type="text"
@@ -392,11 +364,7 @@ export function App() {
             onKeyDown={(e) => e.key === "Enter" && handleCreateTemplate()}
             placeholder="e.g. Weekly Report"
             autoFocus
-            style={{
-              ...s.input,
-              borderColor: t("border", "#e5e7eb"),
-              background: t("card", "#f9fafb"),
-            }}
+            style={s.input}
           />
           <label style={{ ...s.label, marginTop: "0.75rem" }}>Description</label>
           <input
@@ -404,28 +372,17 @@ export function App() {
             value={dialogDesc}
             onChange={(e) => setDialogDesc(e.target.value)}
             placeholder="Brief description"
-            style={{
-              ...s.input,
-              borderColor: t("border", "#e5e7eb"),
-              background: t("card", "#f9fafb"),
-            }}
+            style={s.input}
           />
-          <div
-            style={{
-              display: "flex",
-              gap: "0.5rem",
-              justifyContent: "flex-end",
-              marginTop: "1.25rem",
-            }}
-          >
+          <div className="collateral-dialog-actions">
             <button
-              style={{ ...s.btn, ...s.btnGhost, borderColor: t("border", "#e5e7eb") }}
+              style={{ ...s.btn, ...s.btnGhost }}
               onClick={() => setDialogType(null)}
             >
               Cancel
             </button>
             <button
-              style={{ ...s.btn, ...s.btnPrimary, background: t("primary", "#2563eb") }}
+              style={{ ...s.btn, ...s.btnPrimary }}
               onClick={handleCreateTemplate}
             >
               Create
@@ -436,7 +393,7 @@ export function App() {
 
       {dialogType === "saveAsTemplate" && (
         <Dialog onClose={() => setDialogType(null)}>
-          <h3 style={{ fontSize: "1rem", marginBottom: "1rem" }}>Save as Template</h3>
+          <h3 style={s.dialogTitle}>Save as Template</h3>
           <label style={s.label}>Template Name</label>
           <input
             type="text"
@@ -445,11 +402,7 @@ export function App() {
             onKeyDown={(e) => e.key === "Enter" && handleSaveAsTemplate()}
             placeholder="e.g. Quarterly Report"
             autoFocus
-            style={{
-              ...s.input,
-              borderColor: t("border", "#e5e7eb"),
-              background: t("card", "#f9fafb"),
-            }}
+            style={s.input}
           />
           <label style={{ ...s.label, marginTop: "0.75rem" }}>Description</label>
           <input
@@ -457,28 +410,17 @@ export function App() {
             value={dialogDesc}
             onChange={(e) => setDialogDesc(e.target.value)}
             placeholder="Brief description"
-            style={{
-              ...s.input,
-              borderColor: t("border", "#e5e7eb"),
-              background: t("card", "#f9fafb"),
-            }}
+            style={s.input}
           />
-          <div
-            style={{
-              display: "flex",
-              gap: "0.5rem",
-              justifyContent: "flex-end",
-              marginTop: "1.25rem",
-            }}
-          >
+          <div className="collateral-dialog-actions">
             <button
-              style={{ ...s.btn, ...s.btnGhost, borderColor: t("border", "#e5e7eb") }}
+              style={{ ...s.btn, ...s.btnGhost }}
               onClick={() => setDialogType(null)}
             >
               Cancel
             </button>
             <button
-              style={{ ...s.btn, ...s.btnPrimary, background: t("primary", "#2563eb") }}
+              style={{ ...s.btn, ...s.btnPrimary }}
               onClick={handleSaveAsTemplate}
             >
               Save
@@ -489,19 +431,13 @@ export function App() {
 
       {dialogType === "deleteTemplate" && deleteConfirmId && (
         <Dialog onClose={() => setDialogType(null)}>
-          <h3 style={{ fontSize: "1rem", marginBottom: "0.5rem" }}>Delete Template</h3>
-          <p
-            style={{
-              fontSize: "0.82rem",
-              color: t("muted", "#6b7280"),
-              marginBottom: "1rem",
-            }}
-          >
+          <h3 style={s.dialogTitle}>Delete Template</h3>
+          <p style={{ fontSize: tokens.textSm, color: tokens.textSecondary, margin: "0 0 1rem" }}>
             Are you sure? This cannot be undone.
           </p>
-          <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+          <div className="collateral-dialog-actions">
             <button
-              style={{ ...s.btn, ...s.btnGhost, borderColor: t("border", "#e5e7eb") }}
+              style={{ ...s.btn, ...s.btnGhost }}
               onClick={() => {
                 setDialogType(null);
                 setDeleteConfirmId(null);
@@ -510,7 +446,7 @@ export function App() {
               Cancel
             </button>
             <button
-              style={{ ...s.btn, ...s.btnPrimary, background: t("destructive", "#ef4444") }}
+              style={{ ...s.btn, ...s.btnDanger }}
               onClick={() => handleDeleteTemplate(deleteConfirmId)}
             >
               Delete
@@ -521,7 +457,7 @@ export function App() {
 
       {dialogType === "renameDoc" && (
         <Dialog onClose={() => setDialogType(null)}>
-          <h3 style={{ fontSize: "1rem", marginBottom: "1rem" }}>Rename Document</h3>
+          <h3 style={s.dialogTitle}>Rename Document</h3>
           <label style={s.label}>New name</label>
           <input
             type="text"
@@ -530,28 +466,17 @@ export function App() {
             onKeyDown={(e) => e.key === "Enter" && dialogName.trim() && handleRenameDocument()}
             placeholder="Document name"
             autoFocus
-            style={{
-              ...s.input,
-              borderColor: t("border", "#e5e7eb"),
-              background: t("card", "#f9fafb"),
-            }}
+            style={s.input}
           />
-          <div
-            style={{
-              display: "flex",
-              gap: "0.5rem",
-              justifyContent: "flex-end",
-              marginTop: "1.25rem",
-            }}
-          >
+          <div className="collateral-dialog-actions">
             <button
-              style={{ ...s.btn, ...s.btnGhost, borderColor: t("border", "#e5e7eb") }}
+              style={{ ...s.btn, ...s.btnGhost }}
               onClick={() => setDialogType(null)}
             >
               Cancel
             </button>
             <button
-              style={{ ...s.btn, ...s.btnPrimary, background: t("primary", "#2563eb") }}
+              style={{ ...s.btn, ...s.btnPrimary }}
               onClick={handleRenameDocument}
               disabled={!dialogName.trim()}
             >
@@ -563,25 +488,19 @@ export function App() {
 
       {dialogType === "deleteDoc" && deleteConfirmId && (
         <Dialog onClose={() => setDialogType(null)}>
-          <h3 style={{ fontSize: "1rem", marginBottom: "0.5rem" }}>Delete Document</h3>
-          <p
-            style={{
-              fontSize: "0.82rem",
-              color: t("muted", "#6b7280"),
-              marginBottom: "1rem",
-            }}
-          >
+          <h3 style={s.dialogTitle}>Delete Document</h3>
+          <p style={{ fontSize: tokens.textSm, color: tokens.textSecondary, margin: "0 0 1rem" }}>
             Are you sure you want to delete this document? This cannot be undone.
           </p>
-          <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+          <div className="collateral-dialog-actions">
             <button
-              style={{ ...s.btn, ...s.btnGhost, borderColor: t("border", "#e5e7eb") }}
+              style={{ ...s.btn, ...s.btnGhost }}
               onClick={() => setDialogType(null)}
             >
               Cancel
             </button>
             <button
-              style={{ ...s.btn, ...s.btnPrimary, background: t("destructive", "#ef4444") }}
+              style={{ ...s.btn, ...s.btnDanger }}
               onClick={() => handleDeleteDocument(deleteConfirmId)}
             >
               Delete

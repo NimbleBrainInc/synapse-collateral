@@ -1,5 +1,4 @@
-import { s } from "../styles";
-import { useThemeTokens } from "../theme-utils";
+import { s, tokens } from "../styles";
 import type { DocumentInfo } from "../hooks/useDocuments";
 import { PreviewPane } from "./PreviewPane";
 
@@ -24,19 +23,12 @@ export function DocumentsView({
   previewLoading,
   previewError,
 }: DocumentsViewProps) {
-  const { t } = useThemeTokens();
-
   return (
-    <div style={s.mainLayout}>
-      <div style={{ ...s.leftPanel, borderColor: t("border", "#e5e7eb") }}>
+    <div className="collateral-main-layout" style={s.mainLayout}>
+      <div className="collateral-left-panel" style={s.leftPanel}>
         <div style={s.listHeader}>
           <button
-            style={{
-              ...s.btn,
-              ...s.btnPrimary,
-              background: t("primary", "#2563eb"),
-              width: "100%",
-            }}
+            style={{ ...s.btn, ...s.btnPrimary, width: "100%" }}
             onClick={onNew}
           >
             + New Document
@@ -48,9 +40,7 @@ export function DocumentsView({
               key={d.id}
               style={{
                 ...s.listItem,
-                borderColor: t("border", "#e5e7eb"),
-                background:
-                  selectedId === d.id ? t("secondary", "#f3f4f6") : "transparent",
+                ...(selectedId === d.id ? s.listItemActive : {}),
               }}
               onClick={() => onSelect(d.id)}
             >
@@ -59,35 +49,29 @@ export function DocumentsView({
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
+                  gap: "0.5rem",
                 }}
               >
-                <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>{d.name}</div>
+                <div style={{ ...s.listItemTitle, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {d.name}
+                </div>
                 <button
-                  style={{
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    fontSize: "0.7rem",
-                    color: t("muted", "#6b7280"),
-                    padding: "0.2rem",
-                  }}
+                  aria-label={`Delete ${d.name}`}
+                  style={s.btnIcon}
                   onClick={(e) => {
                     e.stopPropagation();
                     onDelete(d.id);
                   }}
                   title="Delete"
                 >
-                  x
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <line x1="5" y1="5" x2="19" y2="19" />
+                    <line x1="19" y1="5" x2="5" y2="19" />
+                  </svg>
                 </button>
               </div>
-              <div
-                style={{
-                  fontSize: "0.7rem",
-                  color: t("muted", "#6b7280"),
-                  marginTop: "0.15rem",
-                }}
-              >
-                {d.template_id || "custom"} &middot;{" "}
+              <div style={s.listItemMeta}>
+                {d.template_id || "custom"} ·{" "}
                 {d.modified ? new Date(d.modified).toLocaleDateString() : ""}
               </div>
             </div>
@@ -96,8 +80,8 @@ export function DocumentsView({
             <div
               style={{
                 padding: "1rem",
-                fontSize: "0.82rem",
-                color: t("muted", "#6b7280"),
+                fontSize: tokens.textSm,
+                color: tokens.textSecondary,
                 textAlign: "center",
               }}
             >

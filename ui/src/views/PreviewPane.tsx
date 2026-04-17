@@ -1,5 +1,4 @@
-import { s } from "../styles";
-import { useThemeTokens } from "../theme-utils";
+import { s, tokens } from "../styles";
 import { PDFViewer } from "../components/PDFViewer";
 import { useExport } from "../hooks/useExport";
 
@@ -18,20 +17,16 @@ export function PreviewPane({
   hasSelection,
   emptyHint,
 }: PreviewPaneProps) {
-  const { t } = useThemeTokens();
   const { exportPdf } = useExport();
 
   return (
-    <div
-      className="collateral-preview-pane"
-      style={{ ...s.rightPanel, background: t("background", "#ffffff") }}
-    >
+    <div className="collateral-preview-pane" style={s.rightPanel}>
       {blob ? (
         <PDFViewer blob={blob} onDownload={exportPdf} />
       ) : (
-        <div style={{ ...s.previewStatus, color: t("muted", "#6b7280") }}>
+        <div style={s.previewStatus}>
           {error ? (
-            <span style={{ color: t("destructive", "#ef4444") }}>{error}</span>
+            <span style={{ color: tokens.danger }}>{error}</span>
           ) : loading ? (
             <span className="collateral-preview-dots" aria-label="Rendering">
               Rendering<span>.</span>

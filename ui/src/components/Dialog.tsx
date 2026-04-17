@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import { s } from "../styles";
-import { useThemeTokens } from "../theme-utils";
 
 interface DialogProps {
   onClose: () => void;
@@ -9,18 +8,16 @@ interface DialogProps {
 }
 
 export function Dialog({ onClose, children, width }: DialogProps) {
-  const { t } = useThemeTokens();
   return (
     <div
       style={s.overlay}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
+        className="collateral-dialog"
         style={{
           ...s.dialog,
-          width: width ?? s.dialog.width,
-          background: t("background", "#fff"),
-          borderColor: t("border", "#e5e7eb"),
+          ...(width ? { width } : {}),
         }}
       >
         {children}

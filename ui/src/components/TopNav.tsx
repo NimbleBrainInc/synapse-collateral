@@ -1,5 +1,4 @@
 import { s } from "../styles";
-import { useThemeTokens } from "../theme-utils";
 
 export type Tab = "documents" | "templates";
 export type SaveStatus = "idle" | "saving" | "saved";
@@ -16,6 +15,11 @@ interface TopNavProps {
   onToggleSettings: () => void;
 }
 
+const TAB_LABELS: Record<Tab, string> = {
+  documents: "Documents",
+  templates: "Templates",
+};
+
 export function TopNav({
   tab,
   onTabChange,
@@ -27,56 +31,72 @@ export function TopNav({
   settingsOpen,
   onToggleSettings,
 }: TopNavProps) {
-  const { t } = useThemeTokens();
-
   return (
-    <nav style={{ ...s.nav, borderColor: t("border", "#e5e7eb") }}>
-      <span style={s.logo}>Collateral Studio</span>
-      <div style={s.tabGroup}>
-        {(["documents", "templates"] as Tab[]).map((v) => (
-          <button
-            key={v}
-            onClick={() => onTabChange(v)}
-            style={{
-              ...s.tabBtn,
-              color: tab === v ? t("primary", "#2563eb") : t("muted", "#6b7280"),
-              borderBottomColor: tab === v ? t("primary", "#2563eb") : "transparent",
-            }}
-          >
-            {v.charAt(0).toUpperCase() + v.slice(1)}
-          </button>
-        ))}
-      </div>
-      <div style={{ marginLeft: "auto", display: "flex", gap: "0.35rem" }}>
-        {selectedDocument && (
-          <>
+    <nav className="collateral-topnav" style={s.nav}>
+      <span className="collateral-logo" style={s.logo}>
+        <span className="collateral-logo-full">Collateral Studio</span>
+        <span className="collateral-logo-mark" aria-hidden="true">
+          CS
+        </span>
+      </span>
+      <div style={s.tabGroup} role="tablist" aria-label="Views">
+        {(["documents", "templates"] as Tab[]).map((v) => {
+          const active = tab === v;
+          return (
             <button
-              style={{ ...s.btn, ...s.btnGhost, borderColor: t("border", "#e5e7eb") }}
+              key={v}
+              role="tab"
+              aria-selected={active}
+              onClick={() => onTabChange(v)}
+              className={active ? "collateral-tab collateral-tab-active" : "collateral-tab"}
+              style={{
+                ...s.tabBtn,
+                ...(active ? s.tabBtnActive : {}),
+              }}
+            >
+              {TAB_LABELS[v]}
+            </button>
+          );
+        })}
+      </div>
+      <div
+        className="collateral-topnav-actions"
+        style={{ marginLeft: "auto", display: "flex", gap: "0.4rem", alignItems: "center" }}
+      >
+        {selectedDocument && (
+          <div className="collateral-doc-actions" style={{ display: "flex", gap: "0.4rem" }}>
+            <button
+              style={{ ...s.btn, ...s.btnGhost }}
               onClick={onSave}
               disabled={saveStatus === "saving"}
             >
-              {saveStatus === "saved" ? "Saved!" : saveStatus === "saving" ? "Saving..." : "Save"}
+              {saveStatus === "saved" ? "Saved" : saveStatus === "saving" ? "Saving…" : "Save"}
             </button>
             <button
-              style={{ ...s.btn, ...s.btnGhost, borderColor: t("border", "#e5e7eb") }}
+              className="collateral-doc-action-wide"
+              style={{ ...s.btn, ...s.btnGhost }}
               onClick={onSaveAsTemplate}
             >
               Save as Template
             </button>
             <button
-              style={{ ...s.btn, ...s.btnGhost, borderColor: t("border", "#e5e7eb") }}
+              className="collateral-doc-action-wide"
+              style={{ ...s.btn, ...s.btnGhost }}
               onClick={onRename}
             >
               Rename
             </button>
-          </>
+          </div>
         )}
         <button
+          aria-label="Settings"
+          aria-pressed={settingsOpen}
           style={{
             ...s.btn,
             ...s.btnGhost,
-            borderColor: t("border", "#e5e7eb"),
-            color: settingsOpen ? t("primary", "#2563eb") : t("muted", "#6b7280"),
+            ...(settingsOpen
+              ? { color: "var(--color-text-accent)", borderColor: "var(--color-text-accent)" }
+              : {}),
           }}
           onClick={onToggleSettings}
         >

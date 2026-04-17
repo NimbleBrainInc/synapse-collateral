@@ -1,5 +1,4 @@
-import { s } from "../styles";
-import { useThemeTokens } from "../theme-utils";
+import { s, tokens } from "../styles";
 import type { TemplateInfo } from "../hooks/useTemplates";
 import { PreviewPane } from "./PreviewPane";
 
@@ -26,19 +25,12 @@ export function TemplatesView({
   previewLoading,
   previewError,
 }: TemplatesViewProps) {
-  const { t } = useThemeTokens();
-
   return (
-    <div style={s.mainLayout}>
-      <div style={{ ...s.leftPanel, borderColor: t("border", "#e5e7eb") }}>
+    <div className="collateral-main-layout" style={s.mainLayout}>
+      <div className="collateral-left-panel" style={s.leftPanel}>
         <div style={s.listHeader}>
           <button
-            style={{
-              ...s.btn,
-              ...s.btnPrimary,
-              background: t("primary", "#2563eb"),
-              width: "100%",
-            }}
+            style={{ ...s.btn, ...s.btnPrimary, width: "100%" }}
             onClick={onNew}
           >
             + New Template
@@ -50,49 +42,26 @@ export function TemplatesView({
               key={tpl.id}
               style={{
                 ...s.listItem,
-                borderColor: t("border", "#e5e7eb"),
-                background:
-                  selectedId === tpl.id ? t("secondary", "#f3f4f6") : "transparent",
+                ...(selectedId === tpl.id ? s.listItemActive : {}),
               }}
               onClick={() => onSelect(tpl.id)}
             >
-              <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>{tpl.name}</div>
+              <div style={s.listItemTitle}>{tpl.name}</div>
               {tpl.description && (
-                <div
-                  style={{
-                    fontSize: "0.72rem",
-                    color: t("muted", "#6b7280"),
-                    marginTop: "0.15rem",
-                  }}
-                >
-                  {tpl.description}
-                </div>
+                <div style={s.listItemMeta}>{tpl.description}</div>
               )}
-              <div
-                style={{
-                  fontSize: "0.7rem",
-                  color: t("muted", "#6b7280"),
-                  marginTop: "0.15rem",
-                }}
-              >
+              <div style={s.listItemMeta}>
                 {tpl.page_count} page{tpl.page_count !== 1 ? "s" : ""}
               </div>
               <div
-                style={{ display: "flex", gap: "0.25rem", marginTop: "0.35rem" }}
+                style={{ display: "flex", gap: "0.35rem", marginTop: "0.5rem" }}
                 onClick={(e) => e.stopPropagation()}
               >
-                <button
-                  style={{ ...s.smallBtn, borderColor: t("border", "#e5e7eb") }}
-                  onClick={() => onDuplicate(tpl)}
-                >
+                <button style={s.smallBtn} onClick={() => onDuplicate(tpl)}>
                   Duplicate
                 </button>
                 <button
-                  style={{
-                    ...s.smallBtn,
-                    borderColor: t("border", "#e5e7eb"),
-                    color: t("destructive", "#ef4444"),
-                  }}
+                  style={{ ...s.smallBtn, color: tokens.danger }}
                   onClick={() => onDelete(tpl.id)}
                 >
                   Delete
@@ -104,8 +73,8 @@ export function TemplatesView({
             <div
               style={{
                 padding: "1rem",
-                fontSize: "0.82rem",
-                color: t("muted", "#6b7280"),
+                fontSize: tokens.textSm,
+                color: tokens.textSecondary,
                 textAlign: "center",
               }}
             >
