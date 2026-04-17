@@ -12,41 +12,41 @@ export interface TemplateInfo {
 }
 
 export function useTemplates() {
-  const listTool = useCallTool<TemplateInfo[]>("list_templates");
-  const createTool = useCallTool<TemplateInfo>("create_template");
-  const duplicateTool = useCallTool<TemplateInfo>("duplicate_template");
-  const deleteTool = useCallTool<string>("delete_template");
+  const { call: listCall } = useCallTool<TemplateInfo[]>("list_templates");
+  const { call: createCall } = useCallTool<TemplateInfo>("create_template");
+  const { call: duplicateCall } = useCallTool<TemplateInfo>("duplicate_template");
+  const { call: deleteCall } = useCallTool<string>("delete_template");
 
   const [templates, setTemplates] = useState<TemplateInfo[]>([]);
 
   const refresh = useCallback(async () => {
     try {
-      const result = await listTool.call({});
+      const result = await listCall({});
       setTemplates((result.data as TemplateInfo[]) || []);
     } catch {
       /* non-critical */
     }
-  }, [listTool]);
+  }, [listCall]);
 
   const create = useCallback(
     async (args: { template_id: string; name: string; description: string; source: string }) => {
-      await createTool.call(args as Record<string, unknown>);
+      await createCall(args as Record<string, unknown>);
     },
-    [createTool],
+    [createCall],
   );
 
   const duplicate = useCallback(
     async (args: { template_id: string; new_id: string; new_name: string }) => {
-      await duplicateTool.call(args as Record<string, unknown>);
+      await duplicateCall(args as Record<string, unknown>);
     },
-    [duplicateTool],
+    [duplicateCall],
   );
 
   const remove = useCallback(
     async (templateId: string) => {
-      await deleteTool.call({ template_id: templateId });
+      await deleteCall({ template_id: templateId });
     },
-    [deleteTool],
+    [deleteCall],
   );
 
   return { templates, refresh, create, duplicate, remove };

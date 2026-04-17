@@ -4,8 +4,8 @@ import { extractResourceUris, fetchResourceAsBlob } from "../resources";
 
 export function usePreview() {
   const synapse = useSynapse();
-  const previewTool = useCallTool("preview");
-  const previewTemplateTool = useCallTool("preview_template");
+  const { call: previewCall } = useCallTool("preview");
+  const { call: previewTemplateCall } = useCallTool("preview_template");
 
   const [blob, setBlob] = useState<Blob | null>(null);
   const [error, setError] = useState("");
@@ -51,17 +51,17 @@ export function usePreview() {
   );
 
   const previewDocument = useCallback(async () => {
-    await runPreviewTool(() => previewTool.call({}), "Preview failed");
-  }, [previewTool, runPreviewTool]);
+    await runPreviewTool(() => previewCall({}), "Preview failed");
+  }, [previewCall, runPreviewTool]);
 
   const previewTemplate = useCallback(
     async (templateId: string) => {
       await runPreviewTool(
-        () => previewTemplateTool.call({ template_id: templateId }),
+        () => previewTemplateCall({ template_id: templateId }),
         "Failed to preview template",
       );
     },
-    [previewTemplateTool, runPreviewTool],
+    [previewTemplateCall, runPreviewTool],
   );
 
   return { blob, error, loading, previewDocument, previewTemplate, clear, setError };

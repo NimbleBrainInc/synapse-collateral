@@ -19,60 +19,60 @@ export interface WorkspaceState {
 }
 
 export function useDocuments() {
-  const listTool = useCallTool<DocumentInfo[]>("list_documents");
-  const createTool = useCallTool<WorkspaceState>("create_document");
-  const openTool = useCallTool<WorkspaceState>("open_document");
-  const saveTool = useCallTool<DocumentInfo>("save_document");
-  const deleteTool = useCallTool<string>("delete_document");
-  const saveAsTemplateTool = useCallTool("save_as_template");
+  const { call: listCall } = useCallTool<DocumentInfo[]>("list_documents");
+  const { call: createCall } = useCallTool<WorkspaceState>("create_document");
+  const { call: openCall } = useCallTool<WorkspaceState>("open_document");
+  const { call: saveCall } = useCallTool<DocumentInfo>("save_document");
+  const { call: deleteCall } = useCallTool<string>("delete_document");
+  const { call: saveAsTemplateCall } = useCallTool("save_as_template");
 
   const [documents, setDocuments] = useState<DocumentInfo[]>([]);
 
   const refresh = useCallback(async () => {
     try {
-      const result = await listTool.call({});
+      const result = await listCall({});
       setDocuments((result.data as DocumentInfo[]) || []);
     } catch {
       /* non-critical */
     }
-  }, [listTool]);
+  }, [listCall]);
 
   const create = useCallback(
     async (args: { name: string; template_id?: string }): Promise<WorkspaceState> => {
-      const result = await createTool.call(args as Record<string, unknown>);
+      const result = await createCall(args as Record<string, unknown>);
       return result.data as WorkspaceState;
     },
-    [createTool],
+    [createCall],
   );
 
   const open = useCallback(
     async (documentId: string): Promise<WorkspaceState> => {
-      const result = await openTool.call({ document_id: documentId });
+      const result = await openCall({ document_id: documentId });
       return result.data as WorkspaceState;
     },
-    [openTool],
+    [openCall],
   );
 
   const save = useCallback(
     async (args: Record<string, unknown> = {}): Promise<DocumentInfo> => {
-      const result = await saveTool.call(args);
+      const result = await saveCall(args);
       return result.data as DocumentInfo;
     },
-    [saveTool],
+    [saveCall],
   );
 
   const remove = useCallback(
     async (documentId: string): Promise<void> => {
-      await deleteTool.call({ document_id: documentId });
+      await deleteCall({ document_id: documentId });
     },
-    [deleteTool],
+    [deleteCall],
   );
 
   const saveAsTemplate = useCallback(
     async (args: { name: string; description?: string }) => {
-      await saveAsTemplateTool.call(args as Record<string, unknown>);
+      await saveAsTemplateCall(args as Record<string, unknown>);
     },
-    [saveAsTemplateTool],
+    [saveAsTemplateCall],
   );
 
   return { documents, refresh, create, open, save, remove, saveAsTemplate };
