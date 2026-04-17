@@ -144,11 +144,23 @@ def collateral_export(export_id: str, ext: str) -> ResourceResult:
 
 @mcp.resource("collateral://assets/{filename}")
 def collateral_asset(filename: str) -> ResourceResult:
-    """Uploaded asset bytes, addressable by filename under ~/.collateral/assets/."""
-    path = store.ASSETS_DIR / filename
-    if not path.exists() or not path.is_file():
-        return ResourceResult([ResourceContent(b"", mime_type="application/octet-stream")])
-    return ResourceResult([ResourceContent(path.read_bytes(), mime_type=_mime_for(filename))])
+    """Uploaded asset bytes, addressable by filename under ~/.collateral/assets/.
+
+    Uploads pass through _validate_filename in store.py, but this handler is
+    a separate trust boundary (resources can be read by anyone with the URI,
+    not just whoever uploaded) so it re-enforces containment by resolving
+    the path and rejecting anything outside ASSETS_DIR.
+    """
+    empty = ResourceResult([ResourceContent(b"", mime_type="application/octet-stream")])
+    assets_root = store.ASSETS_DIR.resolve()
+    try:
+        candidate = (store.ASSETS_DIR / filename).resolve()
+        candidate.relative_to(assets_root)
+    except (ValueError, OSError):
+        return empty
+    if not candidate.is_file():
+        return empty
+    return ResourceResult([ResourceContent(candidate.read_bytes(), mime_type=_mime_for(filename))])
 
 
 # --- 1-2. Theme ---

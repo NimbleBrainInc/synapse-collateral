@@ -512,6 +512,17 @@ class TestAssetResourceTemplate:
         result = server.collateral_asset("a-folder")
         assert result.contents[0].content == b""
 
+    def test_asset_resource_rejects_path_traversal(self, workspace: Workspace) -> None:
+        del workspace
+        from mcp_collateral import server
+
+        # Classic dot-dot escape
+        assert server.collateral_asset("../../../etc/passwd").contents[0].content == b""
+        # Nested dot-dot mid-path
+        assert server.collateral_asset("sub/../../etc/passwd").contents[0].content == b""
+        # Absolute path
+        assert server.collateral_asset("/etc/passwd").contents[0].content == b""
+
 
 # ---------------------------------------------------------------------------
 # Auto-save contract

@@ -2,6 +2,17 @@
 
 Fat MCP server for document generation. Documents are the primary entity. The agent writes Typst; the server compiles it.
 
+## Breaking changes
+
+- **v0.4+ `export_pdf` no longer accepts `include_data: bool`.** Bytes always
+  move out-of-band via the `collateral://exports/{id}.pdf` resource template —
+  inlining base64 PDFs in tool results blew through the host's 1 MB cap.
+  Direct MCP callers passing `include_data` will now fail input validation;
+  LLM-facing behavior is unchanged.
+- **v0.4+ rendering unified on PDF output.** `preview`, `preview_template`,
+  `export_pdf`, and `compile_typst` all return a single `resource_link` block
+  pointing at a PDF. The previous per-page PNG output path is gone.
+
 ## Commands
 
 ```bash
