@@ -69,7 +69,6 @@ export const s: Record<string, CSSProperties> = {
     minWidth: 0,
     display: "flex",
     flexDirection: "column",
-    padding: "clamp(0rem, 2.5vw, 1.25rem)",
     overflow: "hidden",
   },
   previewFrame: {

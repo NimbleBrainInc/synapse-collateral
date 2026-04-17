@@ -6,8 +6,7 @@ import { useThemeTokens } from "../theme-utils";
 
 interface PDFViewerProps {
   blob: Blob;
-  downloadUrl?: string;
-  downloadFilename?: string;
+  onDownload?: () => void | Promise<void>;
 }
 
 const MIN_SCALE = 0.25;
@@ -22,7 +21,7 @@ function cacheKey(page: number, scale: number) {
   return `${page}@${scale.toFixed(3)}`;
 }
 
-export function PDFViewer({ blob, downloadUrl, downloadFilename }: PDFViewerProps) {
+export function PDFViewer({ blob, onDownload }: PDFViewerProps) {
   const { t } = useThemeTokens();
   const bodyRef = useRef<HTMLDivElement | null>(null);
 
@@ -178,7 +177,6 @@ export function PDFViewer({ blob, downloadUrl, downloadFilename }: PDFViewerProp
   const border = t("border", "#e5e7eb");
   const muted = t("muted", "#6b7280");
   const surface = t("secondary", "#f3f4f6");
-  const background = t("background", "#ffffff");
 
   return (
     <div
@@ -188,11 +186,6 @@ export function PDFViewer({ blob, downloadUrl, downloadFilename }: PDFViewerProp
         minHeight: 0,
         display: "flex",
         flexDirection: "column",
-        background,
-        border: `1px solid ${border}`,
-        borderRadius: 10,
-        overflow: "hidden",
-        boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06)",
       }}
     >
       <div
@@ -237,12 +230,12 @@ export function PDFViewer({ blob, downloadUrl, downloadFilename }: PDFViewerProp
         >
           Fit
         </button>
-        {downloadUrl && (
-          <a
-            href={downloadUrl}
-            download={downloadFilename ?? "document.pdf"}
+        {onDownload && (
+          <button
+            type="button"
+            onClick={() => void onDownload()}
             aria-label="Download PDF"
-            className="collateral-pdf-viewer-download"
+            className="collateral-pdf-viewer-btn collateral-pdf-viewer-download"
             style={{
               marginLeft: "auto",
               display: "inline-flex",
@@ -250,9 +243,7 @@ export function PDFViewer({ blob, downloadUrl, downloadFilename }: PDFViewerProp
               justifyContent: "center",
               width: 24,
               height: 24,
-              borderRadius: 5,
               color: muted,
-              textDecoration: "none",
             }}
           >
             <svg
@@ -270,7 +261,7 @@ export function PDFViewer({ blob, downloadUrl, downloadFilename }: PDFViewerProp
               <path d="m7 10 5 5 5-5" />
               <path d="M5 21h14" />
             </svg>
-          </a>
+          </button>
         )}
       </div>
 

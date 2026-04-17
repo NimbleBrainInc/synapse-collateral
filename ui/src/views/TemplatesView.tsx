@@ -10,7 +10,6 @@ interface TemplatesViewProps {
   onNew: () => void;
   onDuplicate: (tpl: TemplateInfo) => void;
   onDelete: (id: string) => void;
-  previewTitle: string;
   previewBlob: Blob | null;
   previewLoading: boolean;
   previewError: string;
@@ -23,7 +22,6 @@ export function TemplatesView({
   onNew,
   onDuplicate,
   onDelete,
-  previewTitle,
   previewBlob,
   previewLoading,
   previewError,
@@ -118,7 +116,6 @@ export function TemplatesView({
       </div>
 
       <PreviewPane
-        title={previewTitle}
         blob={previewBlob}
         loading={previewLoading}
         error={previewError}

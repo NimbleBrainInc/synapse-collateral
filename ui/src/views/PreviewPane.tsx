@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
 import { s } from "../styles";
 import { useThemeTokens } from "../theme-utils";
 import { PDFViewer } from "../components/PDFViewer";
+import { useExport } from "../hooks/useExport";
 
 interface PreviewPaneProps {
-  title: string;
   blob: Blob | null;
   loading: boolean;
   error: string;
@@ -13,7 +12,6 @@ interface PreviewPaneProps {
 }
 
 export function PreviewPane({
-  title,
   blob,
   loading,
   error,
@@ -21,44 +19,15 @@ export function PreviewPane({
   emptyHint,
 }: PreviewPaneProps) {
   const { t } = useThemeTokens();
-
-  // Blob URL for the PDFViewer's download button; revoked on blob change/unmount.
-  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!blob) {
-      setDownloadUrl((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
-        return null;
-      });
-      return;
-    }
-    const url = URL.createObjectURL(blob);
-    setDownloadUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return url;
-    });
-    return () => {
-      URL.revokeObjectURL(url);
-    };
-  }, [blob]);
-
-  const downloadFilename = useMemo(() => {
-    const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-    return `${slug || "document"}.pdf`;
-  }, [title]);
+  const { exportPdf } = useExport();
 
   return (
     <div
       className="collateral-preview-pane"
-      style={{ ...s.rightPanel, background: t("secondary", "#f3f4f6") }}
+      style={{ ...s.rightPanel, background: t("background", "#ffffff") }}
     >
       {blob ? (
-        <PDFViewer
-          blob={blob}
-          downloadUrl={downloadUrl ?? undefined}
-          downloadFilename={downloadFilename}
-        />
+        <PDFViewer blob={blob} onDownload={exportPdf} />
       ) : (
         <div style={{ ...s.previewStatus, color: t("muted", "#6b7280") }}>
           {error ? (

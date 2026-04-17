@@ -9,7 +9,6 @@ interface DocumentsViewProps {
   onSelect: (id: string) => void;
   onNew: () => void;
   onDelete: (id: string) => void;
-  previewTitle: string;
   previewBlob: Blob | null;
   previewLoading: boolean;
   previewError: string;
@@ -21,7 +20,6 @@ export function DocumentsView({
   onSelect,
   onNew,
   onDelete,
-  previewTitle,
   previewBlob,
   previewLoading,
   previewError,
@@ -110,7 +108,6 @@ export function DocumentsView({
       </div>
 
       <PreviewPane
-        title={previewTitle}
         blob={previewBlob}
         loading={previewLoading}
         error={previewError}

@@ -13,7 +13,6 @@ import { useDocuments } from "./hooks/useDocuments";
 import type { TemplateInfo } from "./hooks/useTemplates";
 import { useTemplates } from "./hooks/useTemplates";
 import { usePreview } from "./hooks/usePreview";
-import { useExport } from "./hooks/useExport";
 
 type DialogType =
   | "newDoc"
@@ -53,7 +52,6 @@ export function App() {
     clear: clearPreview,
     setError: setPreviewError,
   } = usePreview();
-  const { exportPdf } = useExport();
 
   const [selectedDocument, setSelectedDocument] = useState<string | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
@@ -88,16 +86,6 @@ export function App() {
   });
 
   const hasSelection = tab === "documents" ? !!selectedDocument : !!selectedTemplate;
-
-  const previewTitle = (() => {
-    if (tab === "templates" && selectedTemplate) {
-      return templates.find((x) => x.id === selectedTemplate)?.name ?? selectedTemplate;
-    }
-    if (tab === "documents" && selectedDocument) {
-      return documents.find((x) => x.id === selectedDocument)?.name ?? selectedDocument;
-    }
-    return "Preview";
-  })();
 
   const handleSelectDocument = useCallback(
     async (id: string) => {
@@ -219,14 +207,6 @@ export function App() {
     }
   };
 
-  const handleExport = async () => {
-    try {
-      await exportPdf();
-    } catch (e) {
-      setPreviewError(e instanceof Error ? e.message : "Export failed");
-    }
-  };
-
   const handleDeleteDocument = async (id: string) => {
     setDialogType(null);
     setDeleteConfirmId(null);
@@ -269,7 +249,6 @@ export function App() {
         saveStatus={saveStatus}
         onSave={handleSaveDocument}
         onSaveAsTemplate={() => openDialog("saveAsTemplate")}
-        onExport={handleExport}
         onRename={() => {
           setDialogName("");
           setDialogType("renameDoc");
@@ -288,7 +267,6 @@ export function App() {
             setDeleteConfirmId(id);
             setDialogType("deleteDoc");
           }}
-          previewTitle={previewTitle}
           previewBlob={previewBlob}
           previewLoading={previewLoading}
           previewError={hasSelection ? previewError : ""}
@@ -304,7 +282,6 @@ export function App() {
             setDeleteConfirmId(id);
             setDialogType("deleteTemplate");
           }}
-          previewTitle={previewTitle}
           previewBlob={previewBlob}
           previewLoading={previewLoading}
           previewError={hasSelection ? previewError : ""}

@@ -11,7 +11,6 @@ interface TopNavProps {
   saveStatus: SaveStatus;
   onSave: () => void;
   onSaveAsTemplate: () => void;
-  onExport: () => void;
   onRename: () => void;
   settingsOpen: boolean;
   onToggleSettings: () => void;
@@ -24,7 +23,6 @@ export function TopNav({
   saveStatus,
   onSave,
   onSaveAsTemplate,
-  onExport,
   onRename,
   settingsOpen,
   onToggleSettings,
@@ -64,12 +62,6 @@ export function TopNav({
               onClick={onSaveAsTemplate}
             >
               Save as Template
-            </button>
-            <button
-              style={{ ...s.btn, ...s.btnGhost, borderColor: t("border", "#e5e7eb") }}
-              onClick={onExport}
-            >
-              Export PDF
             </button>
             <button
               style={{ ...s.btn, ...s.btnGhost, borderColor: t("border", "#e5e7eb") }}
