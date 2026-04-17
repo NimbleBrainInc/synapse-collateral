@@ -4,7 +4,7 @@ import { s, tokens } from "./styles";
 import { useInjectThemeTokens } from "./theme-utils";
 import { injectResponsiveStyles } from "./styles/responsive";
 import { TopNav } from "./components/TopNav";
-import type { Tab, SaveStatus } from "./components/TopNav";
+import type { Tab } from "./components/TopNav";
 import { Dialog } from "./components/Dialog";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { DocumentsView } from "./views/DocumentsView";
@@ -63,8 +63,6 @@ export function App() {
 
   const [selectedDocument, setSelectedDocument] = useState<string | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
-
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const [dialogType, setDialogType] = useState<DialogType>(null);
@@ -190,18 +188,6 @@ export function App() {
     }
   };
 
-  const handleSaveDocument = async () => {
-    setSaveStatus("saving");
-    try {
-      await saveDoc();
-      setSaveStatus("saved");
-      setTimeout(() => setSaveStatus("idle"), 1500);
-    } catch (e) {
-      setPreviewError(e instanceof Error ? e.message : "Save failed");
-      setSaveStatus("idle");
-    }
-  };
-
   const handleSaveAsTemplate = async () => {
     const name = dialogName.trim();
     if (!name) return;
@@ -247,8 +233,6 @@ export function App() {
         tab={tab}
         onTabChange={setTab}
         selectedDocument={selectedDocument}
-        saveStatus={saveStatus}
-        onSave={handleSaveDocument}
         onSaveAsTemplate={() => openDialog("saveAsTemplate")}
         onRename={() => {
           setDialogName("");

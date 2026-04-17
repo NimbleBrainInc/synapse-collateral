@@ -1,6 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSynapse } from "@nimblebrain/synapse/react";
 import { s, tokens } from "../styles";
 import { AssetUpload } from "../components/AssetUpload";
+import { PDFViewer } from "../components/PDFViewer";
+import { fetchResourceAsBlob } from "../resources";
 
 interface AssetsViewProps {
   assets: string[];
@@ -25,22 +28,68 @@ function kindOf(filename: string): "image" | "pdf" | "other" {
 }
 
 export function AssetsView({ assets, onUpload, onDelete, onRefresh }: AssetsViewProps) {
+  const synapse = useSynapse();
   const [selected, setSelected] = useState<string | null>(null);
+  const [blob, setBlob] = useState<Blob | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const selectedKind = useMemo(
     () => (selected ? kindOf(selected) : null),
     [selected],
   );
 
+  useEffect(() => {
+    let cancelled = false;
+    setBlob(null);
+    setImageUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setError("");
+
+    if (!selected) return;
+    if (selectedKind === "other") return;
+
+    setLoading(true);
+    (async () => {
+      try {
+        const fetched = await fetchResourceAsBlob(
+          synapse,
+          `collateral://assets/${encodeURIComponent(selected)}`,
+        );
+        if (cancelled) return;
+        if (selectedKind === "image") {
+          const url = URL.createObjectURL(fetched);
+          setImageUrl(url);
+        } else {
+          setBlob(fetched);
+        }
+      } catch (e) {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "Failed to load asset");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selected, selectedKind, synapse]);
+
+  useEffect(() => {
+    return () => {
+      if (imageUrl) URL.revokeObjectURL(imageUrl);
+    };
+  }, [imageUrl]);
+
   return (
     <div className="collateral-main-layout" style={s.mainLayout}>
       <div className="collateral-left-panel" style={s.leftPanel}>
         <div style={{ ...s.listHeader, display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-          <AssetUpload
-            onUpload={onUpload}
-            onAfterUpload={onRefresh}
-            compact
-          />
+          <AssetUpload onUpload={onUpload} onAfterUpload={onRefresh} compact />
         </div>
         <div style={s.listScroll}>
           {assets.map((filename) => {
@@ -126,6 +175,43 @@ export function AssetsView({ assets, onUpload, onDelete, onRefresh }: AssetsView
           <div style={s.previewStatus}>
             <span>Select an asset to inspect, or drop files into the left rail to upload.</span>
           </div>
+        ) : error ? (
+          <div style={{ ...s.previewStatus, color: tokens.danger }}>{error}</div>
+        ) : loading ? (
+          <div style={s.previewStatus}>
+            <span className="collateral-preview-dots" aria-label="Loading">
+              Loading<span>.</span>
+              <span>.</span>
+              <span>.</span>
+            </span>
+          </div>
+        ) : selectedKind === "pdf" && blob ? (
+          <PDFViewer blob={blob} />
+        ) : selectedKind === "image" && imageUrl ? (
+          <div
+            style={{
+              flex: 1,
+              minHeight: 0,
+              overflow: "auto",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "1.25rem",
+              background: tokens.bgTertiary,
+            }}
+          >
+            <img
+              src={imageUrl}
+              alt={selected}
+              style={{
+                maxWidth: "100%",
+                maxHeight: "100%",
+                display: "block",
+                boxShadow: tokens.shadowMd,
+                background: "#fff",
+              }}
+            />
+          </div>
         ) : (
           <div
             style={{
@@ -134,53 +220,34 @@ export function AssetsView({ assets, onUpload, onDelete, onRefresh }: AssetsView
               display: "flex",
               flexDirection: "column",
               padding: "1.25rem",
-              gap: "0.75rem",
+              gap: "0.5rem",
               overflow: "auto",
             }}
           >
-            <div>
-              <div
-                style={{
-                  fontFamily: tokens.fontHeading,
-                  fontSize: tokens.headingSm,
-                  lineHeight: tokens.headingSmLh,
-                  fontWeight: tokens.weightSemibold,
-                  color: tokens.textPrimary,
-                  letterSpacing: "-0.01em",
-                }}
-              >
-                {selected}
-              </div>
-              <div style={{ ...s.listItemMeta, marginTop: "0.2rem" }}>
-                {selectedKind}
-                {extOf(selected) ? ` · .${extOf(selected)}` : ""}
-              </div>
-            </div>
-
-            {/* TODO: The server does not yet expose assets via an MCP resource
-                template (no `collateral://assets/{filename}` resource in
-                server.py). Once it does, use synapse.readResource to pull
-                bytes and render images with <img> or PDFs via PDFViewer,
-                matching the preview flow in usePreview.ts. For now we show
-                metadata only. */}
             <div
               style={{
-                flex: 1,
-                minHeight: 200,
-                border: `1px dashed ${tokens.borderPrimary}`,
-                borderRadius: tokens.radiusSm,
-                background: tokens.bgTertiary,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: tokens.textSecondary,
-                fontSize: tokens.textSm,
-                padding: "1rem",
-                textAlign: "center",
+                fontFamily: tokens.fontHeading,
+                fontSize: tokens.headingSm,
+                lineHeight: tokens.headingSmLh,
+                fontWeight: tokens.weightSemibold,
+                color: tokens.textPrimary,
+                letterSpacing: "-0.01em",
               }}
             >
-              Inline previews for assets will appear once the server exposes
-              asset bytes as a readable resource.
+              {selected}
+            </div>
+            <div style={s.listItemMeta}>
+              {selectedKind}
+              {extOf(selected) ? ` · .${extOf(selected)}` : ""}
+            </div>
+            <div
+              style={{
+                marginTop: "1rem",
+                color: tokens.textSecondary,
+                fontSize: tokens.textSm,
+              }}
+            >
+              Inline preview isn't available for this file type.
             </div>
           </div>
         )}

@@ -2,14 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { s } from "../styles";
 
 export type Tab = "documents" | "templates" | "assets";
-export type SaveStatus = "idle" | "saving" | "saved";
 
 interface TopNavProps {
   tab: Tab;
   onTabChange: (tab: Tab) => void;
   selectedDocument: string | null;
-  saveStatus: SaveStatus;
-  onSave: () => void;
   onSaveAsTemplate: () => void;
   onRename: () => void;
   settingsOpen: boolean;
@@ -26,8 +23,6 @@ export function TopNav({
   tab,
   onTabChange,
   selectedDocument,
-  saveStatus,
-  onSave,
   onSaveAsTemplate,
   onRename,
   settingsOpen,
@@ -96,13 +91,6 @@ export function TopNav({
           <div className="collateral-doc-actions" style={{ display: "flex", gap: "0.4rem" }}>
             <button
               style={{ ...s.btn, ...s.btnGhost }}
-              onClick={onSave}
-              disabled={saveStatus === "saving"}
-            >
-              {saveStatus === "saved" ? "Saved" : saveStatus === "saving" ? "Saving…" : "Save"}
-            </button>
-            <button
-              style={{ ...s.btn, ...s.btnGhost }}
               onClick={onSaveAsTemplate}
             >
               Save as Template
@@ -132,20 +120,6 @@ export function TopNav({
             </button>
             {overflowOpen && (
               <div role="menu" className="collateral-overflow-menu">
-                <button
-                  role="menuitem"
-                  onClick={() => {
-                    setOverflowOpen(false);
-                    onSave();
-                  }}
-                  disabled={saveStatus === "saving"}
-                >
-                  {saveStatus === "saved"
-                    ? "Saved"
-                    : saveStatus === "saving"
-                      ? "Saving…"
-                      : "Save"}
-                </button>
                 <button
                   role="menuitem"
                   onClick={() => {

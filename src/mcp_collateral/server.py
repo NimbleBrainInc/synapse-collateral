@@ -19,7 +19,7 @@ from fastmcp.tools import ToolResult
 from mcp.types import Annotations, ResourceLink, TextContent
 from pydantic import AnyUrl
 
-from . import templates as template_mod
+from . import store, templates as template_mod
 from .models import (
     DocumentInfo,
     TemplateInfo,
@@ -30,7 +30,20 @@ from .workspace import Workspace, load_export, store_export
 _EXT_MIME: dict[str, str] = {
     "pdf": "application/pdf",
     "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "gif": "image/gif",
+    "webp": "image/webp",
+    "svg": "image/svg+xml",
+    "txt": "text/plain",
+    "md": "text/markdown",
+    "json": "application/json",
 }
+
+
+def _mime_for(filename: str) -> str:
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    return _EXT_MIME.get(ext, "application/octet-stream")
 
 _USER_ONLY = Annotations(audience=["user"])
 
@@ -125,6 +138,15 @@ def collateral_export(export_id: str, ext: str) -> ResourceResult:
     data = load_export(export_id, ext) or b""
     mime_type = _EXT_MIME.get(ext.lower(), "application/octet-stream")
     return ResourceResult([ResourceContent(data, mime_type=mime_type)])
+
+
+@mcp.resource("collateral://assets/{filename}")
+def collateral_asset(filename: str) -> ResourceResult:
+    """Uploaded asset bytes, addressable by filename under ~/.collateral/assets/."""
+    path = store.ASSETS_DIR / filename
+    if not path.exists() or not path.is_file():
+        return ResourceResult([ResourceContent(b"", mime_type="application/octet-stream")])
+    return ResourceResult([ResourceContent(path.read_bytes(), mime_type=_mime_for(filename))])
 
 
 # --- 1-2. Theme ---
