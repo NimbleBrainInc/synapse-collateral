@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import { s, tokens } from "../styles";
-import { useAssets } from "../hooks/useAssets";
 import { useBrand } from "../hooks/useBrand";
 
-type SettingsSection = "voice" | "components" | "assets" | null;
+type SettingsSection = "voice" | "components";
 
 interface SettingsPanelProps {
   open: boolean;
@@ -11,7 +10,6 @@ interface SettingsPanelProps {
 }
 
 export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
-  const { assets, refresh: refreshAssets, upload, remove: removeAsset } = useAssets();
   const {
     voice,
     setVoice,
@@ -25,11 +23,8 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
   const [section, setSection] = useState<SettingsSection>("voice");
 
   useEffect(() => {
-    if (open) {
-      refreshBrand();
-      refreshAssets();
-    }
-  }, [open, refreshBrand, refreshAssets]);
+    if (open) refreshBrand();
+  }, [open, refreshBrand]);
 
   if (!open) return null;
 
@@ -69,7 +64,7 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
           aria-label="Settings sections"
           style={{ display: "flex", gap: "0.35rem", marginBottom: "1rem", flexWrap: "wrap" }}
         >
-          {(["voice", "components", "assets"] as const).map((sec) => {
+          {(["voice", "components"] as const).map((sec) => {
             const active = section === sec;
             return (
               <button
@@ -80,7 +75,7 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                   ...s.btn,
                   ...(active ? s.btnPrimary : s.btnGhost),
                 }}
-                onClick={() => setSection(active ? null : sec)}
+                onClick={() => setSection(sec)}
               >
                 {sec.charAt(0).toUpperCase() + sec.slice(1)}
               </button>
@@ -142,71 +137,6 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
               >
                 Save Components
               </button>
-            </div>
-          </div>
-        )}
-
-        {section === "assets" && (
-          <div>
-            <h4 style={s.sectionTitle}>Assets</h4>
-            <div style={s.assetGrid}>
-              {assets.map((filename) => (
-                <div key={filename} style={s.assetCard}>
-                  <div style={s.assetThumb}>
-                    {filename.split(".").pop()?.toUpperCase() || "FILE"}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: tokens.textXs,
-                      lineHeight: tokens.textXsLh,
-                      color: tokens.textPrimary,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                      maxWidth: "100%",
-                      textAlign: "center",
-                    }}
-                    title={filename}
-                  >
-                    {filename}
-                  </div>
-                  <button
-                    style={{ ...s.smallBtn, color: tokens.danger }}
-                    onClick={async () => {
-                      try {
-                        await removeAsset(filename);
-                      } catch {
-                        /* non-critical */
-                      }
-                    }}
-                  >
-                    Delete
-                  </button>
-                </div>
-              ))}
-              <label style={{ ...s.assetCard, ...s.dashed, cursor: "pointer" }}>
-                + Upload
-                <input
-                  type="file"
-                  style={{ display: "none" }}
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    const reader = new FileReader();
-                    reader.onload = async () => {
-                      const base64 = (reader.result as string).split(",")[1];
-                      try {
-                        await upload({ filename: file.name, base64_data: base64 });
-                        await refreshAssets();
-                      } catch {
-                        /* non-critical */
-                      }
-                    };
-                    reader.readAsDataURL(file);
-                    e.target.value = "";
-                  }}
-                />
-              </label>
             </div>
           </div>
         )}

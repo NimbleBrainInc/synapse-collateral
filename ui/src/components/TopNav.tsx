@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { s } from "../styles";
 
-export type Tab = "documents" | "templates";
+export type Tab = "documents" | "templates" | "assets";
 export type SaveStatus = "idle" | "saving" | "saved";
 
 interface TopNavProps {
@@ -19,6 +19,7 @@ interface TopNavProps {
 const TAB_LABELS: Record<Tab, string> = {
   documents: "Documents",
   templates: "Templates",
+  assets: "Assets",
 };
 
 export function TopNav({
@@ -62,7 +63,7 @@ export function TopNav({
         </span>
       </span>
       <div style={s.tabGroup} role="tablist" aria-label="Views">
-        {(["documents", "templates"] as Tab[]).map((v) => {
+        {(["documents", "templates", "assets"] as Tab[]).map((v) => {
           const active = tab === v;
           return (
             <button

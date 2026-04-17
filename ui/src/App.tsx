@@ -9,9 +9,11 @@ import { Dialog } from "./components/Dialog";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { DocumentsView } from "./views/DocumentsView";
 import { TemplatesView } from "./views/TemplatesView";
+import { AssetsView } from "./views/AssetsView";
 import { useDocuments } from "./hooks/useDocuments";
 import type { TemplateInfo } from "./hooks/useTemplates";
 import { useTemplates } from "./hooks/useTemplates";
+import { useAssets } from "./hooks/useAssets";
 import { usePreview } from "./hooks/usePreview";
 
 type DialogType =
@@ -44,6 +46,12 @@ export function App() {
     remove: removeTemplate,
   } = useTemplates();
   const {
+    assets,
+    refresh: refreshAssets,
+    upload: uploadAsset,
+    remove: removeAsset,
+  } = useAssets();
+  const {
     blob: previewBlob,
     loading: previewLoading,
     error: previewError,
@@ -71,12 +79,14 @@ export function App() {
 
   useEffect(() => {
     if (tab === "templates") refreshTemplates();
+    else if (tab === "assets") refreshAssets();
     else refreshDocs();
-  }, [tab, refreshDocs, refreshTemplates]);
+  }, [tab, refreshDocs, refreshTemplates, refreshAssets]);
 
   useDataSync(() => {
     if (tab === "templates") refreshTemplates();
-    if (tab === "documents") {
+    else if (tab === "assets") refreshAssets();
+    else if (tab === "documents") {
       refreshDocs();
       if (selectedDocument) previewDocument();
     }
@@ -248,7 +258,7 @@ export function App() {
         onToggleSettings={() => setSettingsOpen((prev) => !prev)}
       />
 
-      {tab === "documents" ? (
+      {tab === "documents" && (
         <DocumentsView
           documents={documents}
           selectedId={selectedDocument}
@@ -262,7 +272,8 @@ export function App() {
           previewLoading={previewLoading}
           previewError={hasSelection ? previewError : ""}
         />
-      ) : (
+      )}
+      {tab === "templates" && (
         <TemplatesView
           templates={templates}
           selectedId={selectedTemplate}
@@ -276,6 +287,14 @@ export function App() {
           previewBlob={previewBlob}
           previewLoading={previewLoading}
           previewError={hasSelection ? previewError : ""}
+        />
+      )}
+      {tab === "assets" && (
+        <AssetsView
+          assets={assets}
+          onUpload={uploadAsset}
+          onDelete={removeAsset}
+          onRefresh={refreshAssets}
         />
       )}
 
