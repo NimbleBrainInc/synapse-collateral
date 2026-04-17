@@ -6,6 +6,8 @@ import { useThemeTokens } from "../theme-utils";
 
 interface PDFViewerProps {
   blob: Blob;
+  downloadUrl?: string;
+  downloadFilename?: string;
 }
 
 const MIN_SCALE = 0.25;
@@ -20,7 +22,7 @@ function cacheKey(page: number, scale: number) {
   return `${page}@${scale.toFixed(3)}`;
 }
 
-export function PDFViewer({ blob }: PDFViewerProps) {
+export function PDFViewer({ blob, downloadUrl, downloadFilename }: PDFViewerProps) {
   const { t } = useThemeTokens();
   const bodyRef = useRef<HTMLDivElement | null>(null);
 
@@ -173,14 +175,21 @@ export function PDFViewer({ blob }: PDFViewerProps) {
   const border = t("border", "#e5e7eb");
   const muted = t("muted", "#6b7280");
   const surface = t("secondary", "#f3f4f6");
+  const background = t("background", "#ffffff");
 
   return (
     <div
+      className="collateral-pdf-viewer"
       style={{
         flex: 1,
         minHeight: 0,
         display: "flex",
         flexDirection: "column",
+        background,
+        border: `1px solid ${border}`,
+        borderRadius: 10,
+        overflow: "hidden",
+        boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06)",
       }}
     >
       <div
@@ -225,6 +234,41 @@ export function PDFViewer({ blob }: PDFViewerProps) {
         >
           Fit
         </button>
+        {downloadUrl && (
+          <a
+            href={downloadUrl}
+            download={downloadFilename ?? "document.pdf"}
+            aria-label="Download PDF"
+            className="collateral-pdf-viewer-download"
+            style={{
+              marginLeft: "auto",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 24,
+              height: 24,
+              borderRadius: 5,
+              color: muted,
+              textDecoration: "none",
+            }}
+          >
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 3v12" />
+              <path d="m7 10 5 5 5-5" />
+              <path d="M5 21h14" />
+            </svg>
+          </a>
+        )}
       </div>
 
       <div
