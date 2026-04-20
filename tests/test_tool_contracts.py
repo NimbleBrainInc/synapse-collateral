@@ -17,9 +17,17 @@ import pytest_asyncio
 
 from mcp_collateral.models import (
     DocumentInfo,
+    PatchSourceResult,
     TemplateInfo,
     WorkspaceState,
 )
+
+# 1x1 PNG bytes for upload_asset contract tests (upload_asset now validates).
+_VALID_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAj"
+    "CB0C8AAAAASUVORK5CYII="
+)
+_VALID_PNG_B64 = base64.b64encode(_VALID_PNG).decode()
 from mcp_collateral.workspace import Workspace
 
 
@@ -176,18 +184,21 @@ class TestDocumentContracts:
 
 
 class TestEditingContracts:
-    """set_source and patch_source return WorkspaceState."""
+    """set_source returns WorkspaceState; patch_source returns PatchSourceResult."""
 
     def test_set_source_returns_workspace_state(self, workspace: Workspace) -> None:
         workspace.create_document("Test")
         result = workspace.set_source("#set text(size: 12pt)\n= Hello")
         assert isinstance(result, WorkspaceState)
 
-    def test_patch_source_returns_workspace_state(self, workspace: Workspace) -> None:
+    def test_patch_source_returns_patch_result(self, workspace: Workspace) -> None:
         workspace.create_document("Test")
         workspace.set_source("#set text(size: 12pt)\n= Hello")
         result = workspace.patch_source("Hello", "World")
-        assert isinstance(result, WorkspaceState)
+        assert isinstance(result, PatchSourceResult)
+        assert result.applied is True
+        assert result.compiled is True
+        assert result.workspace is not None
 
 
 # ---------------------------------------------------------------------------
@@ -205,28 +216,25 @@ class TestAssetContracts:
             assert isinstance(item, str)
 
     def test_upload_asset_returns_dict(self, workspace: Workspace) -> None:
-        data = base64.b64encode(b"fake png data").decode()
-        result = workspace.upload_asset(data, "test.png")
+        result = workspace.upload_asset(_VALID_PNG_B64, "test.png")
         assert isinstance(result, dict)
         assert "filename" in result
 
     def test_upload_then_list_assets(self, workspace: Workspace) -> None:
-        data = base64.b64encode(b"fake").decode()
-        workspace.upload_asset(data, "logo.png")
+        workspace.upload_asset(_VALID_PNG_B64, "logo.png")
         result = workspace.list_assets()
         assert "logo.png" in result
 
     def test_delete_asset_returns_dict(self, workspace: Workspace) -> None:
-        data = base64.b64encode(b"fake").decode()
-        workspace.upload_asset(data, "temp.png")
+        workspace.upload_asset(_VALID_PNG_B64, "temp.png")
         result = workspace.delete_asset("temp.png")
         assert isinstance(result, dict)
         assert result["status"] == "deleted"
 
     def test_asset_filename_sanitization(self, workspace: Workspace) -> None:
-        data = base64.b64encode(b"fake").decode()
+        # Bytes are valid; filename traversal is what's being tested.
         with pytest.raises(ValueError, match="Invalid"):
-            workspace.upload_asset(data, "../etc/passwd")
+            workspace.upload_asset(_VALID_PNG_B64, "../etc/passwd")
 
 
 # ---------------------------------------------------------------------------

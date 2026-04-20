@@ -23,6 +23,7 @@ from . import store
 from . import templates as template_mod
 from .models import (
     DocumentInfo,
+    PatchSourceResult,
     TemplateInfo,
     WorkspaceState,
 )
@@ -64,11 +65,15 @@ mcp = FastMCP(
         "NEVER use set_source to revise an existing document — it wastes tokens "
         "and risks breaking unrelated content.\n"
         "2. set_source is ONLY for writing the initial document from scratch or imported content.\n"
-        "3. set_source, patch_source, and set_theme auto-compile. "
-        "If the tool succeeds, the edit is valid. Do NOT call preview() to verify.\n"
+        "3. patch_source returns a structured PatchSourceResult — always check "
+        "`applied` and `reason`. When applied=True/compiled=True, the edit is "
+        "valid; do NOT call preview() to verify. When reason='text_not_found', "
+        "read nearest_match.context and re-issue with the actual text. When "
+        "reason='compile_error', fix the Typst error in compile_error and "
+        "re-issue — source was rolled back.\n"
         "4. Only call preview() when the user asks to SEE the document.\n"
-        "5. If any tool fails with a compilation error, diagnose and fix it "
-        "before responding. Never report success on failure.\n"
+        "5. Never retry the same patch after text_not_found — read nearest_match "
+        "first. The failure tells you exactly what's at that line.\n"
         "6. Use theme tokens (primary, ink, font-display, section-gap) — "
         "never hardcode rgb(), font names, or pt values in the document body.\n"
         "7. Read skill://collateral/usage for tool selection and error recovery."
@@ -368,7 +373,8 @@ async def patch_source(
     find: str | None = None,
     replace: str | None = None,
     edits: list[dict[str, str]] | None = None,
-) -> WorkspaceState:
+    validate: bool = True,
+) -> PatchSourceResult:
     """Surgical edit: find and replace text in the document source.
 
     THIS IS THE PREFERRED EDITING TOOL. Use it for all changes after the
@@ -384,14 +390,32 @@ async def patch_source(
             {"find": "// end section", "replace": "#pagebreak()\\n// end section"}
         ])
 
-    Each edit replaces the first occurrence only. Batch edits are applied
-    sequentially and compiled once at the end. If any edit fails, all
-    changes are rolled back. Auto-compiles and auto-saves.
+    Returns a structured PatchSourceResult. Inspect these fields:
+      - applied:      True if the edit was committed.
+      - compiled:     True if auto-compile succeeded (always False when
+                      validate=False).
+      - reason:       "text_not_found" → your find string is not in the
+                      source. Read nearest_match.context (includes line
+                      numbers) and re-issue with the actual text.
+                      "compile_error" → the edit was substituted but Typst
+                      failed to render; source was rolled back. Fix the
+                      Typst error (check compile_error) and re-issue.
+      - nearest_match: Line + similarity + ±3-line context for the closest
+                       matching line. None when no close match exists.
+      - suggestion:   Human-readable next step.
+      - failed_edit_index: In batch mode, the index of the failing edit.
+      - workspace:    Current WorkspaceState when applied=True.
+
+    This tool never raises for text-not-found or compile-error — both are
+    terminal states reported via `reason`. Auto-saves on successful apply.
 
     Args:
         find: Text to find (single edit mode). Mutually exclusive with edits.
         replace: Text to replace it with (single edit mode).
         edits: List of {find, replace} dicts (batch mode). Mutually exclusive with find/replace.
+        validate: When True (default), auto-compile after the edit and roll
+                  back on compile failure. Set False to stage edits that may
+                  not compile mid-way; call preview() when ready.
     """
     if edits is not None:
         if find is not None or replace is not None:
@@ -399,10 +423,10 @@ async def patch_source(
         # LLMs sometimes serialize the list as a JSON string
         if isinstance(edits, str):
             edits = json.loads(edits)
-        return _ws.patch_source_batch(edits)
+        return _ws.patch_source_batch(edits, validate=validate)
     if find is None or replace is None:
         raise ValueError("Provide either find+replace or edits")
-    return _ws.patch_source(find, replace)
+    return _ws.patch_source(find, replace, validate=validate)
 
 
 @mcp.tool()

@@ -8,6 +8,7 @@ The workspace holds the currently open document. Documents have:
 from __future__ import annotations
 
 import base64
+import difflib
 import io
 import re
 import secrets
@@ -23,10 +24,17 @@ from . import templates as template_mod
 from . import theme as theme_mod
 from .models import (
     DocumentInfo,
+    NearestMatch,
+    PatchSourceResult,
     TemplateInfo,
     ThemeData,
     WorkspaceState,
 )
+
+# Fuzzy-match threshold for "did the agent mean this line?". Below this, we
+# don't surface a nearest_match and tell the agent to call get_source.
+_NEAREST_MATCH_THRESHOLD = 0.6
+_CONTEXT_RADIUS_LINES = 3
 
 # Rendered artifacts are written here so tools can return resource_link
 # references instead of inlining base64 bytes in tool results.
@@ -254,73 +262,184 @@ class Workspace:
             raise
         return self.get_state()
 
-    def _find_nearby(self, needle: str, radius: int = 200) -> str:
-        """Return a snippet of source near where *needle* was likely intended.
+    def _nearest_line_match(self, query: str) -> NearestMatch | None:
+        """Fuzzy-match the first line of *query* against source lines.
 
-        Tries progressively shorter prefixes of the first line of *needle*
-        to find an approximate match, then returns *radius* chars of context
-        around that position.  Falls back to the first *radius* chars.
+        Uses difflib.SequenceMatcher on stripped lines. Returns None when
+        the best similarity is below _NEAREST_MATCH_THRESHOLD — signalling
+        that the agent should fall back to get_source.
         """
-        first_line = needle.split("\n", 1)[0][:60]
-        for length in range(len(first_line), 9, -5):
-            prefix = first_line[:length]
-            pos = self.source.find(prefix)
-            if pos != -1:
-                start = max(0, pos - radius // 2)
-                end = min(len(self.source), pos + radius // 2)
-                return self.source[start:end]
-        # Fallback: beginning of source
-        return self.source[:radius]
+        if not self.source or not query:
+            return None
+        needle = query.split("\n", 1)[0].strip()
+        if not needle:
+            return None
+        lines = self.source.splitlines()
+        if not lines:
+            return None
+        best_ratio = 0.0
+        best_idx = 0
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            # autojunk=False: accurate on Typst source; autojunk's heuristic
+            # gives wildly inflated ratios for lines much longer than needle.
+            ratio = difflib.SequenceMatcher(None, needle, stripped, autojunk=False).ratio()
+            if ratio > best_ratio:
+                best_ratio = ratio
+                best_idx = i
+        if best_ratio < _NEAREST_MATCH_THRESHOLD:
+            return None
+        start = max(0, best_idx - _CONTEXT_RADIUS_LINES)
+        end = min(len(lines), best_idx + _CONTEXT_RADIUS_LINES + 1)
+        width = len(str(end))
+        context_lines = [f"{str(i + 1).rjust(width)}│ {lines[i]}" for i in range(start, end)]
+        return NearestMatch(
+            line=best_idx + 1,
+            similarity=round(best_ratio, 3),
+            context="\n".join(context_lines),
+        )
 
-    def patch_source(self, find: str, replace: str) -> WorkspaceState:
-        """Find and replace in the source. Auto-compiles and auto-saves."""
-        if find not in self.source:
-            nearby = self._find_nearby(find)
-            msg = f"Text not found in source: {find[:100]}...\nNearby source:\n{nearby}"
+    def _not_found_result(
+        self,
+        query: str,
+        failed_edit_index: int | None = None,
+    ) -> PatchSourceResult:
+        near = self._nearest_line_match(query)
+        if near is not None:
+            suggestion = (
+                f"Line {near.line} is the closest match (similarity "
+                f"{near.similarity}). Re-issue the patch using the exact "
+                "text shown in the context, or call get_source to read "
+                "the current document."
+            )
+        else:
+            suggestion = (
+                "No close match in the current source. Call get_source "
+                "to read the document, then re-issue the patch with the "
+                "exact text."
+            )
+        return PatchSourceResult(
+            applied=False,
+            compiled=False,
+            reason="text_not_found",
+            query=query,
+            nearest_match=near,
+            suggestion=suggestion,
+            failed_edit_index=failed_edit_index,
+        )
+
+    def _compile_error_result(
+        self,
+        query: str | None,
+        error: str,
+    ) -> PatchSourceResult:
+        return PatchSourceResult(
+            applied=False,
+            compiled=False,
+            reason="compile_error",
+            query=query,
+            compile_error=error,
+            suggestion=(
+                "The edit was found and substituted, but Typst failed to "
+                "render. Source was rolled back. Fix the Typst error "
+                "(check the message for the offending line) and re-issue "
+                "the patch. Pass validate=false to stage edits without "
+                "auto-compiling."
+            ),
+        )
+
+    def patch_source(
+        self,
+        find: str,
+        replace: str,
+        validate: bool = True,
+    ) -> PatchSourceResult:
+        """Find and replace in the source.
+
+        Returns a PatchSourceResult describing the outcome. Does not raise
+        for text_not_found or compile_error — both are reported via the
+        ``reason`` field. Raises only for programming errors (e.g. empty
+        find string).
+        """
+        if not find:
+            msg = "'find' must be a non-empty string"
             raise ValueError(msg)
+        if find not in self.source:
+            return self._not_found_result(find)
         original = self.source
-        self.source = self.source.replace(find, replace, 1)  # replace first occurrence only
+        self.source = self.source.replace(find, replace, 1)
         self._invalidate()
+        if not validate:
+            self._auto_save()
+            return PatchSourceResult(
+                applied=True,
+                compiled=False,
+                workspace=self.get_state(),
+            )
         try:
             self._verify_compile()
-            self._auto_save()
-        except Exception:
+        except Exception as exc:
             self.source = original
             self._invalidate()
-            raise
-        return self.get_state()
+            return self._compile_error_result(find, str(exc))
+        self._auto_save()
+        return PatchSourceResult(
+            applied=True,
+            compiled=True,
+            workspace=self.get_state(),
+        )
 
-    def patch_source_batch(self, edits: list[dict[str, str]]) -> WorkspaceState:
-        """Apply multiple find-replace edits, compile once at the end.
+    def patch_source_batch(
+        self,
+        edits: list[dict[str, str]],
+        validate: bool = True,
+    ) -> PatchSourceResult:
+        """Apply multiple find/replace edits, compile once at the end.
 
-        Each edit is applied sequentially to the current source.
-        If any find string is not found, raises ValueError with the
-        failing edit index and text. Edits already applied before
-        the failure are rolled back.
+        Each edit is applied sequentially. If any edit's ``find`` is not
+        present, no edits are committed and the result carries
+        ``reason="text_not_found"`` with ``failed_edit_index`` identifying
+        the offending entry. If compilation fails, all edits are rolled
+        back and ``reason="compile_error"`` is returned.
         """
+        if not edits:
+            msg = "edits must be a non-empty list"
+            raise ValueError(msg)
         original = self.source
         for i, edit in enumerate(edits):
             find = edit.get("find", "")
             replace = edit.get("replace", "")
             if not find:
                 self.source = original
-                raise ValueError(f"Edit {i}: 'find' must be a non-empty string")
+                msg = f"Edit {i}: 'find' must be a non-empty string"
+                raise ValueError(msg)
             if find not in self.source:
-                nearby = self._find_nearby(find)
+                result = self._not_found_result(find, failed_edit_index=i)
                 self.source = original
-                raise ValueError(
-                    f"Edit {i}: text not found in source: {find[:100]}...\nNearby source:\n{nearby}"
-                )
+                return result
             self.source = self.source.replace(find, replace, 1)
         self._invalidate()
+        if not validate:
+            self._auto_save()
+            return PatchSourceResult(
+                applied=True,
+                compiled=False,
+                workspace=self.get_state(),
+            )
         try:
             self._verify_compile()
-            self._auto_save()
-        except Exception:
+        except Exception as exc:
             self.source = original
             self._invalidate()
-            raise
-        return self.get_state()
+            return self._compile_error_result(None, str(exc))
+        self._auto_save()
+        return PatchSourceResult(
+            applied=True,
+            compiled=True,
+            workspace=self.get_state(),
+        )
 
     # --- Content Import ---
 
@@ -354,9 +473,52 @@ class Workspace:
 
     # --- Assets ---
 
+    _RASTER_IMAGE_EXTS = frozenset({"png", "jpg", "jpeg", "gif", "webp", "bmp", "tiff"})
+
+    def _validate_image_bytes(self, data: bytes, filename: str) -> None:
+        """Reject corrupt image bytes before the asset hits disk.
+
+        Raster formats are decoded via pymupdf (battle-tested MuPDF image
+        pipeline). SVG is checked for XML well-formedness. Unknown
+        extensions are trusted — non-image assets pass through.
+        """
+        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+        if ext == "svg":
+            try:
+                from xml.etree import ElementTree as ET
+
+                ET.fromstring(data)
+            except ET.ParseError as exc:
+                msg = (
+                    f"Asset '{filename}' is not well-formed SVG "
+                    f"({exc}). Re-upload with valid bytes."
+                )
+                raise ValueError(msg) from exc
+            return
+        if ext not in self._RASTER_IMAGE_EXTS:
+            return
+        try:
+            import pymupdf
+
+            pymupdf.Pixmap(data)
+        except Exception as exc:
+            msg = (
+                f"Asset '{filename}' failed image validation: {exc}. "
+                "The bytes appear corrupt — re-upload a fresh copy. "
+                "Validation happens at upload so you see the error "
+                "now rather than later at compile time."
+            )
+            raise ValueError(msg) from exc
+
     def upload_asset(self, base64_data: str, filename: str) -> dict[str, str]:
-        """Decode base64 data and save as an asset. Returns path info."""
+        """Decode base64 data and save as an asset. Returns path info.
+
+        Image bytes are validated up-front (pymupdf for raster, XML parse
+        for SVG). Corruption fails here rather than surfacing mid-compile
+        many turns later.
+        """
         data = base64.b64decode(base64_data)
+        self._validate_image_bytes(data, filename)
         path = store.save_asset(filename, data)
         return {"filename": filename, "path": str(path)}
 

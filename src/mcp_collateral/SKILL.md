@@ -99,6 +99,39 @@ For a single change, use the simple form:
 patch_source(find="#v(78pt)", replace="#v(24pt)")
 ```
 
+### Reading the response
+
+`patch_source` returns a structured result. Always inspect these fields:
+
+| Field | Meaning |
+|---|---|
+| `applied` | `True` if the edit was committed. |
+| `compiled` | `True` if Typst rendered the new source. |
+| `reason` | `"text_not_found"` or `"compile_error"` when the edit failed. |
+| `nearest_match` | `{line, similarity, context}` — the closest matching source line with ±3 lines of context (line-numbered). Present when similarity ≥ 0.6. |
+| `suggestion` | Human-readable next step. |
+| `failed_edit_index` | Which entry in a batch failed. |
+| `compile_error` | The Typst error when the edit compiled poorly. |
+| `workspace` | Current `WorkspaceState` when `applied=True`. |
+
+**Recovery rules:**
+
+- `applied=True, compiled=True` → edit is valid. Do NOT call `preview()` to verify.
+- `reason="text_not_found"` → read `nearest_match.context`. The correct text is right there. Re-issue the patch with the exact string. Do not guess again without reading the context.
+- `reason="compile_error"` → source was rolled back. Read `compile_error` (Typst error with line number), fix the edit content, re-issue.
+
+### Staging multi-step edits
+
+If you need to make several edits where the intermediate state may not compile, pass `validate=False` to skip auto-compile:
+
+```
+patch_source(edits=[...], validate=False)    # stage
+patch_source(edits=[...], validate=False)    # stage more
+preview()                                    # now compile
+```
+
+The default is `validate=True` — use it unless you specifically need to stage.
+
 ### Quick reference
 
 | Change scope | Tool | Why |

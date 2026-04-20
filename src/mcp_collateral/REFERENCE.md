@@ -43,14 +43,29 @@ When creating a document from a template, the template source is copied directly
 
 ## Error Recovery
 
-When any editing tool fails, read the error and fix it. Never report success when it failed.
+`patch_source` never raises for not-found or compile errors — both are reported via the structured `PatchSourceResult`. Inspect `applied`, `compiled`, and `reason` every call.
+
+### patch_source result reasons
+
+| `reason` | What happened | Recovery |
+|---|---|---|
+| `null` (applied=True, compiled=True) | Edit committed, doc compiles. | Move on. Do not call `preview()` to verify. |
+| `null` (applied=True, compiled=False) | `validate=False` was used; compile skipped. | Keep staging, call `preview()` when ready. |
+| `"text_not_found"` | Your `find` string isn't in the source. | Read `nearest_match.context` (shows ±3 lines with line numbers). Re-issue with the exact text — or call `get_source()` if similarity is too low for `nearest_match` to appear. |
+| `"compile_error"` | Edit was substituted but Typst rejected it. Source rolled back. | Read `compile_error` for the Typst error + line number. Fix the edit content, re-issue. |
+
+### Typst compile errors (surfaced via `compile_error`)
 
 | Error | Fix |
 |---|---|
 | "unknown font family: X" | `install_font(url=...)` or `set_theme({"font-display": "Available Font"})` |
 | "unknown variable: X" | Add `#let X = ...` to theme block via `set_theme` or fix in source |
 | "file not found" (asset) | `list_assets()` → check filename → `upload_asset` or fix path |
-| Typst compilation error | Read error line number → fix via `patch_source` or `set_source` |
+| Generic compilation error | Read error line number → fix via `patch_source` |
+
+### Asset uploads
+
+`upload_asset` validates image bytes at upload time (pymupdf for raster, XML parse for SVG). A corrupt PNG is caught here, not 40 turns later when Typst tries to render it. If upload raises with "image validation", re-encode the asset and retry — the bytes you uploaded are corrupt.
 
 ## Document Lifecycle
 
