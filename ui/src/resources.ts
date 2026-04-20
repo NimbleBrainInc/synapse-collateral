@@ -19,6 +19,24 @@ export function extractResourceUris(blocks: unknown[]): string[] {
     .map((block) => block.uri);
 }
 
+/**
+ * Extract the text message from MCP tool content blocks. Used to surface
+ * meaningful error messages from `isError: true` tool responses (where
+ * compile errors, validation failures, etc. arrive as text blocks).
+ */
+export function extractTextMessage(blocks: unknown[]): string {
+  const texts = blocks
+    .filter(
+      (block): block is { type: "text"; text: string } =>
+        block != null &&
+        typeof block === "object" &&
+        (block as Record<string, unknown>).type === "text" &&
+        typeof (block as Record<string, unknown>).text === "string",
+    )
+    .map((block) => block.text);
+  return texts.join("\n").trim();
+}
+
 function base64ToBytes(b64: string): Uint8Array {
   const binary = atob(b64);
   const bytes = new Uint8Array(binary.length);
