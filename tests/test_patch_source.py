@@ -60,6 +60,49 @@ class TestPatchSourceSuccess:
         assert "New Title" in workspace.source
         assert "Line X" in workspace.source
 
+    def test_workspace_field_reflects_post_edit_state(self, workspace: Workspace) -> None:
+        """On success, PatchSourceResult.workspace is the NEW state, not stale.
+
+        The UI reads result.workspace to refresh its display; a regression that
+        returned the pre-edit snapshot would go unnoticed until the UI looked
+        visibly wrong.
+        """
+        workspace.create_document("Test")
+        # Include a theme block so get_state() has something non-trivial to parse.
+        original = (
+            "// === THEME ===\n"
+            '#let primary = rgb("#000000")\n'
+            "// === END THEME ===\n"
+            "= Original Heading\n"
+        )
+        workspace.set_source(original)
+        result = workspace.patch_source("= Original Heading", "= Revised Heading")
+        assert result.applied is True
+        assert result.workspace is not None
+        # Post-edit state is what the caller sees
+        assert "Revised Heading" in workspace.source
+        assert "Original Heading" not in workspace.source
+        # The returned workspace reflects the same document we just edited
+        assert result.workspace.document_name == "Test"
+
+    def test_batch_edits_apply_sequentially(self, workspace: Workspace) -> None:
+        """Edit N can find text that edit N-1 created — the docstring promises this."""
+        workspace.create_document("Test")
+        workspace.set_source("= Alpha\nBody.\n")
+        result = workspace.patch_source_batch(
+            [
+                # First edit creates "Beta"
+                {"find": "Alpha", "replace": "Beta"},
+                # Second edit finds "Beta" (only exists because edit 1 ran)
+                {"find": "= Beta", "replace": "= Gamma"},
+            ]
+        )
+        assert result.applied is True
+        assert result.compiled is True
+        assert "= Gamma" in workspace.source
+        assert "Alpha" not in workspace.source
+        assert "Beta" not in workspace.source
+
 
 class TestTextNotFound:
     """reason='text_not_found' — no raise, structured response."""
