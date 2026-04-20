@@ -4,6 +4,18 @@ Fat MCP server for document generation. Documents are the primary entity. The ag
 
 ## Breaking changes
 
+- **v0.5+ `patch_source` returns `PatchSourceResult`, not `WorkspaceState`.**
+  text_not_found and compile_error are terminal states reported via
+  `reason`, not raised exceptions. Callers must inspect `applied`,
+  `compiled`, `reason`, `nearest_match`, and `compile_error`. The
+  `workspace` field carries the post-edit state on success only.
+  A new `validate: bool = True` parameter lets callers stage edits
+  that skip auto-compile. Rollback on compile failure is preserved.
+- **v0.5+ `upload_asset` validates image bytes at upload.** Raster
+  assets (PNG/JPG/GIF/WEBP/BMP/TIFF) are decoded via pymupdf; SVGs are
+  parsed for XML well-formedness. Corrupt bytes raise `ValueError`
+  with a clear message instead of sitting on disk until Typst fails
+  at compile time.
 - **v0.4+ `export_pdf` no longer accepts `include_data: bool`.** Bytes always
   move out-of-band via the `collateral://exports/{id}.pdf` resource template —
   inlining base64 PDFs in tool results blew through the host's 1 MB cap.

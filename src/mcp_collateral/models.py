@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 # --- Theme ---
@@ -73,3 +75,38 @@ class WorkspaceState(BaseModel):
     document_name: str | None = None
     template_id: str | None = None
     theme: ThemeData = Field(default_factory=ThemeData)
+
+
+# --- Editing (patch_source) ---
+
+
+class NearestMatch(BaseModel):
+    """Fuzzy-matched context for a failed patch query."""
+
+    line: int
+    similarity: float
+    context: str
+
+
+PatchFailureReason = Literal["text_not_found", "compile_error"]
+
+
+class PatchSourceResult(BaseModel):
+    """Structured response from patch_source.
+
+    Three terminal states:
+    - applied=True, compiled=True  → edit committed, document compiles
+    - applied=True, compiled=False → validate=False was used; compile skipped
+    - applied=False, reason=...    → edit rejected (text_not_found or compile_error);
+                                     source unchanged
+    """
+
+    applied: bool
+    compiled: bool
+    reason: PatchFailureReason | None = None
+    query: str | None = None
+    nearest_match: NearestMatch | None = None
+    suggestion: str | None = None
+    compile_error: str | None = None
+    failed_edit_index: int | None = None
+    workspace: WorkspaceState | None = None
