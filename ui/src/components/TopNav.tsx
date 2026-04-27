@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { s } from "../styles";
 
-export type Tab = "documents" | "templates" | "assets";
+export type Tab = "documents" | "templates" | "components" | "assets";
 
 interface TopNavProps {
   tab: Tab;
@@ -9,13 +9,12 @@ interface TopNavProps {
   selectedDocument: string | null;
   onSaveAsTemplate: () => void;
   onRename: () => void;
-  settingsOpen: boolean;
-  onToggleSettings: () => void;
 }
 
 const TAB_LABELS: Record<Tab, string> = {
   documents: "Documents",
   templates: "Templates",
+  components: "Components",
   assets: "Assets",
 };
 
@@ -25,8 +24,6 @@ export function TopNav({
   selectedDocument,
   onSaveAsTemplate,
   onRename,
-  settingsOpen,
-  onToggleSettings,
 }: TopNavProps) {
   const [overflowOpen, setOverflowOpen] = useState(false);
   const overflowRef = useRef<HTMLDivElement | null>(null);
@@ -58,7 +55,7 @@ export function TopNav({
         </span>
       </span>
       <div style={s.tabGroup} role="tablist" aria-label="Views">
-        {(["documents", "templates", "assets"] as Tab[]).map((v) => {
+        {(["documents", "templates", "components", "assets"] as Tab[]).map((v) => {
           const active = tab === v;
           return (
             <button
@@ -142,20 +139,6 @@ export function TopNav({
             )}
           </div>
         )}
-        <button
-          aria-label="Settings"
-          aria-pressed={settingsOpen}
-          style={{
-            ...s.btn,
-            ...s.btnGhost,
-            ...(settingsOpen
-              ? { color: "var(--color-text-accent)", borderColor: "var(--color-text-accent)" }
-              : {}),
-          }}
-          onClick={onToggleSettings}
-        >
-          Settings
-        </button>
       </div>
     </nav>
   );
