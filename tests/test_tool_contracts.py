@@ -562,3 +562,39 @@ class TestAutoSaveContract:
         source_path = tmp_path / "documents" / "test" / "source.typ"
         assert source_path.exists()
         assert "Saved" in source_path.read_text()
+
+
+# ---------------------------------------------------------------------------
+# Voice tool wrapper — the @mcp.tool catches the cap ValueError and returns a
+# structured {"status": "error"} envelope the settings UI consumes. Exercised
+# through the MCP client (not Workspace.set_voice, which raises) because an
+# over-cap body is reachable only via an agent tool call — the UI disables
+# Save above the cap.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestVoiceToolWrapper:
+    async def test_set_voice_over_cap_returns_structured_error(self, mcp_client) -> None:
+        from mcp_collateral.workspace import MAX_VOICE_BYTES
+
+        oversized = "x" * (MAX_VOICE_BYTES + 1)
+        result = await mcp_client.call_tool("set_voice", {"content": oversized})
+        # The tool must translate the cap breach into a structured error,
+        # NOT let the ValueError cross the wire as a transport-level failure.
+        assert result.data["status"] == "error"
+        assert "byte limit" in result.data["error"]
+
+    async def test_set_voice_within_cap_saves(self, mcp_client) -> None:
+        result = await mcp_client.call_tool("set_voice", {"content": "Be terse."})
+        assert result.data["status"] == "saved"
+
+    async def test_app_instructions_resource_round_trips(self, mcp_client) -> None:
+        # The platform reads `app://instructions` on every prompt assembly.
+        # Unset → empty body (platform omits the overlay).
+        empty = await mcp_client.read_resource("app://instructions")
+        assert empty[0].text == ""
+        # After set_voice the resource serves the saved body verbatim.
+        await mcp_client.call_tool("set_voice", {"content": "# Voice\n\nWrite plainly."})
+        saved = await mcp_client.read_resource("app://instructions")
+        assert saved[0].text == "# Voice\n\nWrite plainly."
