@@ -36,6 +36,11 @@ from .models import (
 _NEAREST_MATCH_THRESHOLD = 0.6
 _CONTEXT_RADIUS_LINES = 3
 
+# Cap matches the platform's overlay limit (`MAX_INSTRUCTIONS_BYTES` in
+# nimblebrain code). Enforced here so a successful set_voice never produces
+# a voice.md the platform would later refuse to surface.
+MAX_VOICE_BYTES = 8 * 1024
+
 # Rendered artifacts are written here so tools can return resource_link
 # references instead of inlining base64 bytes in tool results.
 _EXPORT_TTL_SECONDS = 24 * 60 * 60
@@ -538,7 +543,22 @@ class Workspace:
         return store.read_voice()
 
     def set_voice(self, content: str) -> dict[str, str]:
-        """Write the brand voice document."""
+        """Write the brand voice document.
+
+        Empty content clears the file (post-condition: file does not exist).
+        Caps at 8 KiB UTF-8 — mirrors the platform's `app://instructions`
+        contract so a save that succeeds here is guaranteed to fit when the
+        platform reads it on the next prompt.
+        """
+        encoded = content.encode("utf-8")
+        if len(encoded) > MAX_VOICE_BYTES:
+            msg = (
+                f"Voice exceeds {MAX_VOICE_BYTES} byte limit (got {len(encoded)} bytes)"
+            )
+            raise ValueError(msg)
+        if content == "":
+            store.clear_voice()
+            return {"status": "cleared"}
         path = store.write_voice(content)
         return {"status": "saved", "path": str(path)}
 

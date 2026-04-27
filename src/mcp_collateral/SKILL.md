@@ -2,8 +2,6 @@
 
 30 tools. Documents are the primary entity. Theme lives in the source.
 
-<!-- VOICE -->
-
 ## Theme Discipline
 
 Every `.typ` file has a `// === THEME ===` block that defines all design tokens:

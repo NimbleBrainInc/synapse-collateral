@@ -129,6 +129,12 @@ def write_voice(content: str) -> Path:
     return path
 
 
+def clear_voice() -> None:
+    """Remove voice.md if it exists (no-op when absent)."""
+    path = BASE_DIR / "voice.md"
+    path.unlink(missing_ok=True)
+
+
 # ---------------------------------------------------------------------------
 # Assets
 # ---------------------------------------------------------------------------

@@ -88,17 +88,30 @@ _ws = Workspace()
 
 @mcp.resource("skill://collateral/usage")
 def collateral_skill() -> str:
-    """How to effectively use the Collateral Studio tools."""
-    content = SKILL_CONTENT
-    voice = _ws.get_voice()
-    if voice:
-        content = content.replace(
-            "<!-- VOICE -->",
-            f"## Brand Voice\n\n{voice}\n",
-        )
-    else:
-        content = content.replace("<!-- VOICE -->\n\n", "")
-    return content
+    """How to effectively use the Collateral Studio tools.
+
+    Voice content is no longer spliced into this skill — it's served via
+    `app://instructions` and the NimbleBrain platform wraps it in
+    `<app-custom-instructions>` containment automatically. The placeholder
+    is stripped here so the skill renders cleanly in standalone hosts too.
+    """
+    return SKILL_CONTENT.replace("<!-- VOICE -->\n\n", "").replace("<!-- VOICE -->", "")
+
+
+# --- Custom Instructions (NimbleBrain platform contract) ---
+
+
+@mcp.resource("app://instructions", mime_type="text/markdown")
+def collateral_custom_instructions() -> str:
+    """Per-bundle custom instructions for the NimbleBrain platform.
+
+    NimbleBrain reads `app://instructions` from every active bundle on each
+    prompt assembly. A non-empty body lands inside `<app-custom-instructions>`
+    containment in the system prompt; empty omits the block. For collateral,
+    this is the same body as `voice.md` — brand voice *is* the bundle's
+    custom instructions for document generation.
+    """
+    return _ws.get_voice()
 
 
 @mcp.resource("skill://collateral/reference")
@@ -120,7 +133,12 @@ _SETTINGS_HTML = _PROJECT_ROOT / "ui" / "settings.html"
 
 @mcp.resource("ui://collateral/settings")
 def collateral_settings_ui() -> str:
-    """Collateral configuration panel — brand, voice, assets."""
+    """Collateral configuration panel — brand theme and custom instructions.
+
+    Components and assets are managed inside the Collateral Studio app
+    (Components/Assets views), not here. This panel is intentionally
+    scoped to workspace-wide config the agent uses on every document.
+    """
     if _SETTINGS_HTML.exists():
         return _SETTINGS_HTML.read_text()
     return _INLINE_SETTINGS_HTML  # defined at end of file to keep tools readable
@@ -510,13 +528,19 @@ async def get_voice() -> str:
 async def set_voice(content: str) -> dict[str, str]:
     """Set the brand voice document that guides writing style.
 
-    The voice content is appended to the skill resource so the agent
-    automatically writes in the configured tone and style.
+    Surfaced to the agent on every conversation turn via the platform's
+    `app://instructions` contract — no manual skill splicing needed.
+    Empty content clears the voice. Capped at 8 KiB UTF-8.
 
     Args:
         content: Markdown describing the brand voice, tone, and style guidelines.
     """
-    return _ws.set_voice(content)
+    try:
+        return _ws.set_voice(content)
+    except ValueError as err:
+        # 8 KiB cap → return a structured tool error instead of letting
+        # the exception cross the wire as a transport-level failure.
+        return {"status": "error", "error": str(err)}
 
 
 @mcp.tool()
@@ -690,35 +714,36 @@ _INLINE_SETTINGS_HTML = """\
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: system-ui, -apple-system, sans-serif; padding: 0; color: #1a1a1a; background: transparent; font-size: 14px; line-height: 1.5; }
-  h2 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+  h2 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
   h3 { font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #555; text-transform: uppercase; letter-spacing: 0.5px; }
+  p.lede { font-size: 13px; color: #555; margin-bottom: 12px; }
   .section { margin-bottom: 24px; padding: 16px; border: 1px solid #e5e5e5; border-radius: 8px; background: #fff; }
   .field { margin-bottom: 12px; }
   .field label { display: block; font-size: 12px; font-weight: 500; color: #666; margin-bottom: 4px; }
   .field input, .field select { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; }
-  .field textarea { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; min-height: 100px; font-family: monospace; resize: vertical; }
+  .field textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; line-height: 1.5; min-height: 180px; font-family: ui-monospace, SFMono-Regular, monospace; resize: vertical; }
   .color-row { display: flex; gap: 8px; align-items: center; }
   .color-row input[type=color] { width: 32px; height: 32px; padding: 0; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; }
   .color-row input[type=text] { flex: 1; }
-  button { padding: 8px 16px; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; background: #2563eb; color: #fff; }
+  .row { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+  .count { font-size: 12px; color: #777; margin-left: auto; }
+  .count.over { color: #b91c1c; font-weight: 500; }
+  button { padding: 8px 14px; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; background: #2563eb; color: #fff; }
   button:hover { background: #1d4ed8; }
   button:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn-secondary { background: #f3f4f6; color: #374151; }
   .btn-secondary:hover { background: #e5e7eb; }
-  .assets-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-  .asset-tag { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; background: #f3f4f6; border-radius: 4px; font-size: 12px; }
-  .asset-tag button { padding: 0 4px; background: none; color: #999; font-size: 14px; }
-  .asset-tag button:hover { color: #ef4444; }
-  .status { font-size: 12px; margin-top: 8px; padding: 6px 10px; border-radius: 4px; }
+  .status { font-size: 12px; padding: 6px 10px; border-radius: 4px; }
   .status.ok { background: #f0fdf4; color: #166534; }
   .status.err { background: #fef2f2; color: #991b1b; }
-  .loading { color: #999; font-style: italic; }
+  .loading { color: #999; font-style: italic; padding: 16px; }
 </style>
 </head>
 <body>
-<div id="root" class="loading">Loading configuration...</div>
+<div id="root" class="loading">Loading configuration…</div>
 <script>
 (function() {
+  const MAX = 8 * 1024;
   let _reqId = 0;
   const _pending = {};
 
@@ -729,6 +754,13 @@ _INLINE_SETTINGS_HTML = """\
       window.parent.postMessage({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args || {} } }, "*");
     });
   }
+  function readResource(uri) {
+    return new Promise((resolve, reject) => {
+      const id = ++_reqId;
+      _pending[id] = { resolve, reject };
+      window.parent.postMessage({ jsonrpc: "2.0", id, method: "resources/read", params: { uri } }, "*");
+    });
+  }
 
   window.addEventListener("message", (e) => {
     const msg = e.data;
@@ -736,7 +768,7 @@ _INLINE_SETTINGS_HTML = """\
     if (msg.id && _pending[msg.id]) {
       const { resolve, reject } = _pending[msg.id];
       delete _pending[msg.id];
-      if (msg.error) reject(new Error(msg.error.message || "Tool call failed"));
+      if (msg.error) reject(new Error(msg.error.message || "Request failed"));
       else resolve(msg.result);
     }
   });
@@ -748,26 +780,24 @@ _INLINE_SETTINGS_HTML = """\
     return result;
   }
 
+  function utf8Bytes(s) { return new Blob([s]).size; }
+
   async function init() {
     const root = document.getElementById("root");
     try {
-      const [themeResult, voiceResult, componentsResult, assetsResult] = await Promise.all([
+      const [themeResult, instructionsRes] = await Promise.all([
         callTool("get_theme"),
-        callTool("get_voice"),
-        callTool("get_components"),
-        callTool("list_assets"),
+        readResource("app://instructions"),
       ]);
       const theme = parseResult(themeResult) || {};
-      const voice = parseResult(voiceResult) || "";
-      const components = parseResult(componentsResult) || "";
-      const assets = parseResult(assetsResult) || [];
-
+      const instructions = (instructionsRes && instructionsRes.contents && instructionsRes.contents[0] && instructionsRes.contents[0].text) || "";
       const colors = theme.colors || {};
       const fonts = theme.fonts || {};
 
       root.innerHTML = `
         <div class="section">
           <h2>Theme</h2>
+          <p class="lede">Colors and fonts every document inherits. Set once for the workspace.</p>
           <h3>Colors</h3>
           <div class="field">
             <label>Primary</label>
@@ -792,39 +822,24 @@ _INLINE_SETTINGS_HTML = """\
             <label>Body Font</label>
             <input type="text" id="font-body" value="${fonts.body || ''}" placeholder="e.g. Georgia, serif" />
           </div>
-          <button id="save-theme">Save Theme</button>
-          <div id="theme-status"></div>
+          <div class="row">
+            <button id="save-theme">Save Theme</button>
+            <span id="theme-status"></span>
+          </div>
         </div>
 
         <div class="section">
-          <h2>Brand Voice</h2>
+          <h2>Custom Instructions</h2>
+          <p class="lede">Brand voice, tone, and writing conventions the agent applies to every document it generates. Markdown supported.</p>
           <div class="field">
-            <label>Voice guidelines (Markdown)</label>
-            <textarea id="voice-text">${typeof voice === "string" ? voice : ""}</textarea>
+            <textarea id="ci-text" placeholder="e.g. Write in second person. Avoid jargon. Cite sources for engineering claims.">${typeof instructions === "string" ? instructions : ""}</textarea>
           </div>
-          <button id="save-voice">Save Voice</button>
-          <div id="voice-status"></div>
-        </div>
-
-        <div class="section">
-          <h2>Reusable Components</h2>
-          <div class="field">
-            <label>Typst component source</label>
-            <textarea id="components-text">${typeof components === "string" ? components : ""}</textarea>
+          <div class="row">
+            <button id="save-ci">Save</button>
+            <button class="btn-secondary" id="reset-ci">Reset</button>
+            <span class="count" id="ci-count">0 / ${MAX.toLocaleString()} characters</span>
           </div>
-          <button id="save-components">Save Components</button>
-          <div id="components-status"></div>
-        </div>
-
-        <div class="section">
-          <h2>Assets</h2>
-          <div class="assets-list" id="assets-list">
-            ${(Array.isArray(assets) ? assets : []).map(a => '<span class="asset-tag">' + a + '<button data-asset="' + a + '">&times;</button></span>').join("")}
-          </div>
-          <div style="margin-top:12px">
-            <input type="file" id="upload-asset" accept="image/*,.pdf,.svg" />
-          </div>
-          <div id="assets-status"></div>
+          <div id="ci-status" style="margin-top:8px"></div>
         </div>
       `;
       root.className = "";
@@ -851,54 +866,40 @@ _INLINE_SETTINGS_HTML = """\
         } catch (e) { status.className = "status err"; status.textContent = e.message; }
       });
 
-      // Save voice
-      document.getElementById("save-voice").addEventListener("click", async () => {
-        const status = document.getElementById("voice-status");
-        try {
-          await callTool("set_voice", { content: document.getElementById("voice-text").value });
-          status.className = "status ok"; status.textContent = "Voice saved.";
-        } catch (e) { status.className = "status err"; status.textContent = e.message; }
-      });
+      // Custom Instructions
+      const ciText = document.getElementById("ci-text");
+      const ciCount = document.getElementById("ci-count");
+      const ciStatus = document.getElementById("ci-status");
+      const ciSave = document.getElementById("save-ci");
+      const ciReset = document.getElementById("reset-ci");
+      let lastSaved = ciText.value;
 
-      // Save components
-      document.getElementById("save-components").addEventListener("click", async () => {
-        const status = document.getElementById("components-status");
-        try {
-          await callTool("set_components", { source: document.getElementById("components-text").value });
-          status.className = "status ok"; status.textContent = "Components saved.";
-        } catch (e) { status.className = "status err"; status.textContent = e.message; }
-      });
+      function updateCount() {
+        const bytes = utf8Bytes(ciText.value);
+        ciCount.textContent = bytes.toLocaleString() + " / " + MAX.toLocaleString() + " characters";
+        ciCount.className = "count" + (bytes > MAX ? " over" : "");
+        ciSave.disabled = bytes > MAX || ciText.value === lastSaved;
+        ciReset.disabled = ciText.value === lastSaved;
+      }
+      ciText.addEventListener("input", updateCount);
+      updateCount();
 
-      // Delete asset
-      document.getElementById("assets-list").addEventListener("click", async (e) => {
-        const btn = e.target.closest("[data-asset]");
-        if (!btn) return;
-        const filename = btn.dataset.asset;
-        if (!confirm("Delete " + filename + "?")) return;
-        const status = document.getElementById("assets-status");
+      ciSave.addEventListener("click", async () => {
+        ciStatus.className = ""; ciStatus.textContent = "";
         try {
-          await callTool("delete_asset", { filename });
-          btn.closest(".asset-tag").remove();
-          status.className = "status ok"; status.textContent = filename + " deleted.";
-        } catch (e) { status.className = "status err"; status.textContent = e.message; }
+          const res = await callTool("set_voice", { content: ciText.value });
+          const parsed = parseResult(res);
+          if (parsed && parsed.status === "error") throw new Error(parsed.error || "Save failed");
+          lastSaved = ciText.value;
+          ciStatus.className = "status ok"; ciStatus.textContent = "Saved.";
+          updateCount();
+          setTimeout(() => { ciStatus.textContent = ""; ciStatus.className = ""; }, 1500);
+        } catch (e) { ciStatus.className = "status err"; ciStatus.textContent = e.message; }
       });
-
-      // Upload asset
-      document.getElementById("upload-asset").addEventListener("change", async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const status = document.getElementById("assets-status");
-        const reader = new FileReader();
-        reader.onload = async () => {
-          const base64 = reader.result.split(",")[1];
-          try {
-            await callTool("upload_asset", { base64_data: base64, filename: file.name });
-            const list = document.getElementById("assets-list");
-            list.insertAdjacentHTML("beforeend", '<span class="asset-tag">' + file.name + '<button data-asset="' + file.name + '">&times;</button></span>');
-            status.className = "status ok"; status.textContent = file.name + " uploaded.";
-          } catch (e) { status.className = "status err"; status.textContent = e.message; }
-        };
-        reader.readAsDataURL(file);
+      ciReset.addEventListener("click", () => {
+        ciText.value = lastSaved;
+        ciStatus.className = ""; ciStatus.textContent = "";
+        updateCount();
       });
 
     } catch (e) {
