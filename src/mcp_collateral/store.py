@@ -146,7 +146,7 @@ def save_asset(filename: str, data: bytes) -> Path:
 def list_assets() -> list[str]:
     """Return sorted list of asset filenames."""
     _ensure_dirs()
-    return sorted(p.name for p in ASSETS_DIR.iterdir() if p.is_file())
+    return sorted(p.name for p in ASSETS_DIR.iterdir() if p.is_file() and not p.name.startswith("."))
 
 
 def delete_asset(filename: str) -> None:
