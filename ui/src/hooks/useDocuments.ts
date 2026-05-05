@@ -9,7 +9,7 @@ export interface DocumentInfo {
   modified: string;
 }
 
-export interface WorkspaceState {
+export interface DocumentState {
   document_id: string | null;
   document_name: string | null;
   template_id: string | null;
@@ -20,8 +20,8 @@ export interface WorkspaceState {
 
 export function useDocuments() {
   const { call: listCall } = useCallTool<DocumentInfo[]>("list_documents");
-  const { call: createCall } = useCallTool<WorkspaceState>("create_document");
-  const { call: openCall } = useCallTool<WorkspaceState>("open_document");
+  const { call: createCall } = useCallTool<DocumentState>("create_document");
+  const { call: openCall } = useCallTool<DocumentState>("open_document");
   const { call: saveCall } = useCallTool<DocumentInfo>("save_document");
   const { call: deleteCall } = useCallTool<string>("delete_document");
   const { call: saveAsTemplateCall } = useCallTool("save_as_template");
@@ -38,17 +38,17 @@ export function useDocuments() {
   }, [listCall]);
 
   const create = useCallback(
-    async (args: { name: string; template_id?: string }): Promise<WorkspaceState> => {
+    async (args: { name: string; template_id?: string }): Promise<DocumentState> => {
       const result = await createCall(args as Record<string, unknown>);
-      return result.data as WorkspaceState;
+      return result.data as DocumentState;
     },
     [createCall],
   );
 
   const open = useCallback(
-    async (documentId: string): Promise<WorkspaceState> => {
+    async (documentId: string): Promise<DocumentState> => {
       const result = await openCall({ document_id: documentId });
-      return result.data as WorkspaceState;
+      return result.data as DocumentState;
     },
     [openCall],
   );

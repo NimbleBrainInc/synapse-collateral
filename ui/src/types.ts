@@ -57,15 +57,16 @@ export interface SectionState {
   description?: string;
 }
 
-export interface WorkspaceState {
+export interface DocumentState {
   document_id: string | null;
   document_name: string | null;
   template_id: string | null;
   theme?: ThemeData;
-  source_sha?: string | null;
-  source?: string;
-  sections?: SectionState[];
-  has_cache?: boolean;
+}
+
+export interface SourceResponse {
+  document_id: string;
+  source: string;
 }
 
 export interface PagePreview {
@@ -92,15 +93,15 @@ export interface ExportResult {
 // create_template() → TemplateInfo
 // duplicate_template() → TemplateInfo
 // save_as_template() → TemplateInfo
-// create_document() → WorkspaceState
+// create_document() → DocumentState
 // list_documents() → DocumentInfo[]
-// open_document() → WorkspaceState
+// open_document() → DocumentState
 // save_document() → DocumentInfo
-// get_workspace() → WorkspaceState
-// set_content() → WorkspaceState
-// set_source() → WorkspaceState
+// get_workspace() → DocumentState
+// set_content() → DocumentState
+// set_source() → DocumentState
 // get_theme() → { colors: Record<string,string>, fonts: Record<string,string>, spacing: Record<string,string> }
-// set_theme() → WorkspaceState
+// set_theme() → DocumentState
 // get_template() → { info: TemplateInfo, source: string, theme: ThemeData }
 // get_voice() → string
 // set_voice() → { status: string; path: string }

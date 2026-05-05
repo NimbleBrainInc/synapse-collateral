@@ -19,7 +19,7 @@ from mcp_collateral.models import (
     DocumentInfo,
     PatchSourceResult,
     TemplateInfo,
-    WorkspaceState,
+    DocumentState,
 )
 
 # 1x1 PNG bytes for upload_asset contract tests (upload_asset now validates).
@@ -61,7 +61,7 @@ def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Workspace:
 
 
 class TestThemeContracts:
-    """get_theme returns dict with colors/fonts/spacing; set_theme returns WorkspaceState."""
+    """get_theme returns dict with colors/fonts/spacing; set_theme returns DocumentState."""
 
     def test_get_theme_returns_dict_with_expected_keys(self, workspace: Workspace) -> None:
         result = workspace.get_theme()
@@ -80,7 +80,7 @@ class TestThemeContracts:
         # Create a doc with a template that has a theme block
         workspace.create_document("Test", template_id="one-pager")
         result = workspace.set_theme({"accent": "#ff0000"})
-        assert isinstance(result, WorkspaceState)
+        assert isinstance(result, DocumentState)
 
 
 # ---------------------------------------------------------------------------
@@ -140,11 +140,11 @@ class TestTemplateContracts:
 
 
 class TestDocumentContracts:
-    """Document tools return WorkspaceState or DocumentInfo."""
+    """Document tools return DocumentState or DocumentInfo."""
 
     def test_create_document_returns_workspace_state(self, workspace: Workspace) -> None:
         result = workspace.create_document("Test Doc")
-        assert isinstance(result, WorkspaceState)
+        assert isinstance(result, DocumentState)
         assert result.document_id is not None
         assert result.template_id is None
 
@@ -153,7 +153,7 @@ class TestDocumentContracts:
         if not templates:
             pytest.skip("No seed templates available")
         result = workspace.create_document("Test", template_id=templates[0].id)
-        assert isinstance(result, WorkspaceState)
+        assert isinstance(result, DocumentState)
         assert result.template_id == templates[0].id
         assert result.document_id is not None
 
@@ -171,7 +171,7 @@ class TestDocumentContracts:
 
     def test_get_state_returns_workspace_state(self, workspace: Workspace) -> None:
         result = workspace.get_state()
-        assert isinstance(result, WorkspaceState)
+        assert isinstance(result, DocumentState)
         assert hasattr(result, "template_id")
         assert hasattr(result, "theme")
         # v3: no starter_id
@@ -184,12 +184,12 @@ class TestDocumentContracts:
 
 
 class TestEditingContracts:
-    """set_source returns WorkspaceState; patch_source returns PatchSourceResult."""
+    """set_source returns DocumentState; patch_source returns PatchSourceResult."""
 
     def test_set_source_returns_workspace_state(self, workspace: Workspace) -> None:
         workspace.create_document("Test")
         result = workspace.set_source("#set text(size: 12pt)\n= Hello")
-        assert isinstance(result, WorkspaceState)
+        assert isinstance(result, DocumentState)
 
     def test_patch_source_returns_patch_result(self, workspace: Workspace) -> None:
         workspace.create_document("Test")
@@ -198,7 +198,7 @@ class TestEditingContracts:
         assert isinstance(result, PatchSourceResult)
         assert result.applied is True
         assert result.compiled is True
-        assert result.workspace is not None
+        assert result.document is not None
 
 
 # ---------------------------------------------------------------------------

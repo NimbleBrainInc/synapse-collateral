@@ -110,7 +110,7 @@ patch_source(find="#v(78pt)", replace="#v(24pt)")
 | `suggestion` | Human-readable next step. |
 | `failed_edit_index` | Which entry in a batch failed. |
 | `compile_error` | The Typst error when the edit compiled poorly. |
-| `workspace` | Current `WorkspaceState` when `applied=True`. |
+| `document` | Current `DocumentState` when `applied=True`. |
 
 **Recovery rules:**
 

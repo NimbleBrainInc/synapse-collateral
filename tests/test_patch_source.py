@@ -43,7 +43,7 @@ class TestPatchSourceSuccess:
         assert result.applied is True
         assert result.compiled is True
         assert result.reason is None
-        assert result.workspace is not None
+        assert result.document is not None
         assert "Goodbye World" in workspace.source
 
     def test_batch_patch_returns_applied_compiled(self, workspace: Workspace) -> None:
@@ -63,7 +63,7 @@ class TestPatchSourceSuccess:
     def test_workspace_field_reflects_post_edit_state(self, workspace: Workspace) -> None:
         """On success, PatchSourceResult.workspace is the NEW state, not stale.
 
-        The UI reads result.workspace to refresh its display; a regression that
+        The UI reads result.document to refresh its display; a regression that
         returned the pre-edit snapshot would go unnoticed until the UI looked
         visibly wrong.
         """
@@ -78,12 +78,12 @@ class TestPatchSourceSuccess:
         workspace.set_source(original)
         result = workspace.patch_source("= Original Heading", "= Revised Heading")
         assert result.applied is True
-        assert result.workspace is not None
+        assert result.document is not None
         # Post-edit state is what the caller sees
         assert "Revised Heading" in workspace.source
         assert "Original Heading" not in workspace.source
         # The returned workspace reflects the same document we just edited
-        assert result.workspace.document_name == "Test"
+        assert result.document.document_name == "Test"
 
     def test_successive_edits_emit_distinct_source_sha(self, workspace: Workspace) -> None:
         """Each successful edit must change workspace.source_sha.

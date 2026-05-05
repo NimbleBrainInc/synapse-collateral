@@ -25,11 +25,11 @@ from . import templates as template_mod
 from . import theme as theme_mod
 from .models import (
     DocumentInfo,
+    DocumentState,
     NearestMatch,
     PatchSourceResult,
     TemplateInfo,
     ThemeData,
-    WorkspaceState,
 )
 
 # Fuzzy-match threshold for "did the agent mean this line?". Below this, we
@@ -119,7 +119,7 @@ class Workspace:
 
     # --- Introspection ---
 
-    def get_state(self) -> WorkspaceState:
+    def get_state(self) -> DocumentState:
         parsed = theme_mod.parse_theme(self.source)
         theme = ThemeData(
             colors=parsed.get("colors", {}),
@@ -127,7 +127,7 @@ class Workspace:
             spacing=parsed.get("spacing", {}),
         )
 
-        return WorkspaceState(
+        return DocumentState(
             document_id=self.document_id,
             document_name=self.document_name,
             template_id=self.template_id,
@@ -149,7 +149,7 @@ class Workspace:
         """Parse and return theme data from the current source."""
         return theme_mod.parse_theme(self.source)
 
-    def set_theme(self, updates: dict) -> WorkspaceState:
+    def set_theme(self, updates: dict) -> DocumentState:
         """Update theme tokens in the source, auto-compile, and auto-save."""
         self.source = theme_mod.update_theme(self.source, updates)
         self._invalidate()
@@ -193,7 +193,7 @@ class Workspace:
 
     # --- Documents ---
 
-    def create_document(self, name: str, template_id: str | None = None) -> WorkspaceState:
+    def create_document(self, name: str, template_id: str | None = None) -> DocumentState:
         doc_id = _unique_slug(name)
         self.document_id = doc_id
         self.document_name = name
@@ -212,7 +212,7 @@ class Workspace:
     def list_documents(self) -> list[DocumentInfo]:
         return store.list_documents()
 
-    def open_document(self, document_id: str) -> WorkspaceState:
+    def open_document(self, document_id: str) -> DocumentState:
         meta, source = store.load_document(document_id)
         self.document_id = meta.id
         self.document_name = meta.name
@@ -255,7 +255,7 @@ class Workspace:
 
     # --- Editing ---
 
-    def set_source(self, source: str) -> WorkspaceState:
+    def set_source(self, source: str) -> DocumentState:
         """Replace the Typst source, compile, and auto-save."""
         original = self.source
         self.source = source
@@ -383,7 +383,7 @@ class Workspace:
             return PatchSourceResult(
                 applied=True,
                 compiled=False,
-                workspace=self.get_state(),
+                document=self.get_state(),
             )
         try:
             self._verify_compile()
@@ -395,7 +395,7 @@ class Workspace:
         return PatchSourceResult(
             applied=True,
             compiled=True,
-            workspace=self.get_state(),
+            document=self.get_state(),
         )
 
     def patch_source_batch(
@@ -433,7 +433,7 @@ class Workspace:
             return PatchSourceResult(
                 applied=True,
                 compiled=False,
-                workspace=self.get_state(),
+                document=self.get_state(),
             )
         try:
             self._verify_compile()
@@ -445,7 +445,7 @@ class Workspace:
         return PatchSourceResult(
             applied=True,
             compiled=True,
-            workspace=self.get_state(),
+            document=self.get_state(),
         )
 
     # --- Content Import ---

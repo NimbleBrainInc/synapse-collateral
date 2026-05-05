@@ -23,9 +23,9 @@ from . import store
 from . import templates as template_mod
 from .models import (
     DocumentInfo,
+    DocumentState,
     PatchSourceResult,
     TemplateInfo,
-    WorkspaceState,
 )
 from .workspace import Workspace, load_export, store_export
 
@@ -200,7 +200,7 @@ async def get_theme() -> dict:
 
 
 @mcp.tool()
-async def set_theme(updates: dict) -> WorkspaceState:
+async def set_theme(updates: dict) -> DocumentState:
     """Update theme tokens in the current document.
 
     Merges the provided values into the source's theme block,
@@ -295,7 +295,7 @@ async def delete_template(template_id: str) -> str:
 
 
 @mcp.tool()
-async def create_document(name: str, template_id: str | None = None) -> WorkspaceState:
+async def create_document(name: str, template_id: str | None = None) -> DocumentState:
     """Create a new document and set it as the active workspace.
 
     Optionally start from a template. If no template, creates a
@@ -319,7 +319,7 @@ async def list_documents() -> list[DocumentInfo]:
 
 
 @mcp.tool()
-async def open_document(document_id: str) -> WorkspaceState:
+async def open_document(document_id: str) -> DocumentState:
     """Load a saved document into the workspace.
 
     Args:
@@ -366,7 +366,7 @@ async def delete_document(document_id: str) -> str:
 
 
 @mcp.tool()
-async def get_workspace() -> WorkspaceState:
+async def get_workspace() -> DocumentState:
     """Get workspace metadata: document name, template, and theme.
 
     Does NOT include the Typst source — use get_source when you need
@@ -422,7 +422,7 @@ async def patch_source(
                        matching line. None when no close match exists.
       - suggestion:   Human-readable next step.
       - failed_edit_index: In batch mode, the index of the failing edit.
-      - workspace:    Current WorkspaceState when applied=True.
+      - document:     Current DocumentState when applied=True.
 
     This tool never raises for text-not-found or compile-error — both are
     terminal states reported via `reason`. Auto-saves on successful apply.
@@ -448,7 +448,7 @@ async def patch_source(
 
 
 @mcp.tool()
-async def set_source(source: str) -> WorkspaceState:
+async def set_source(source: str) -> DocumentState:
     """Replace the full Typst source. ONLY for initial document creation.
 
     Use this ONLY when writing a brand-new document from scratch or from
