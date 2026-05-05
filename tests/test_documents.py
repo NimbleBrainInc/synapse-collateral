@@ -323,3 +323,52 @@ class TestValidation:
     def test_get_unknown_document_raises(self, isolated_storage: Path) -> None:
         with pytest.raises(FileNotFoundError):
             documents.get("nonexistent")
+
+
+class TestDocumentIdValidation:
+    """Path-traversal defense: every doc tool takes document_id from the
+    LLM/UI now, so the store must reject anything that isn't a slug."""
+
+    @pytest.mark.parametrize(
+        "bad_id",
+        [
+            "../etc/passwd",
+            "..",
+            "foo/bar",
+            "foo\\bar",
+            "foo.bar",  # dots disallowed — slugs are URL-shaped
+            "Foo",  # uppercase disallowed
+            "-leading-hyphen",
+            "trailing-hyphen-",
+            "",
+            " ",
+            "foo bar",
+        ],
+    )
+    def test_set_source_rejects_unsafe_document_id(
+        self, isolated_storage: Path, bad_id: str
+    ) -> None:
+        with pytest.raises(ValueError, match="Invalid document_id"):
+            documents.set_source(bad_id, "= Hello")
+
+    @pytest.mark.parametrize(
+        "bad_id",
+        ["../escape", "foo/bar", ".."],
+    )
+    def test_get_rejects_unsafe_document_id(self, isolated_storage: Path, bad_id: str) -> None:
+        with pytest.raises(ValueError, match="Invalid document_id"):
+            documents.get(bad_id)
+
+    def test_delete_rejects_unsafe_document_id(self, isolated_storage: Path) -> None:
+        with pytest.raises(ValueError, match="Invalid document_id"):
+            documents.delete("..")
+
+    def test_render_rejects_unsafe_document_id(self, isolated_storage: Path) -> None:
+        with pytest.raises(ValueError, match="Invalid document_id"):
+            documents.render_pdf("../foo")
+
+    def test_valid_slug_accepted(self, isolated_storage: Path) -> None:
+        # Sanity: legitimate slugs pass.
+        documents.create("Hello World")
+        documents.set_source("hello-world", "= Hi")
+        assert "Hi" in documents.get_source("hello-world").source

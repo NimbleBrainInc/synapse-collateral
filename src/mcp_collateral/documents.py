@@ -295,12 +295,21 @@ def _compile_and_persist(meta: DocumentMeta, source: str) -> bytes:
 
 
 def _read_cached_pdf(document_id: str) -> bytes | None:
-    """Return output.pdf bytes when it's at least as fresh as source.typ."""
-    doc_dir = store.DOCUMENTS_DIR / document_id
+    """Return output.pdf bytes when it's at least as fresh as source.typ.
+
+    Routes through ``store._doc_dir`` so document_id validation runs
+    here too, not just on the write paths.
+    """
+    doc_dir = store._doc_dir(document_id)
     pdf_path = doc_dir / "output.pdf"
     src_path = doc_dir / "source.typ"
     if not pdf_path.exists() or not src_path.exists():
         return None
+    # Strict <, not <=: _compile_and_persist writes source.typ before
+    # output.pdf, so equal mtimes (possible on second-resolution
+    # filesystems) mean the pair was written together and the cache is
+    # fresh. validate=False edits write source.typ without rewriting
+    # output.pdf, leaving src.mtime strictly newer — caught here.
     if pdf_path.stat().st_mtime < src_path.stat().st_mtime:
         return None
     return pdf_path.read_bytes()

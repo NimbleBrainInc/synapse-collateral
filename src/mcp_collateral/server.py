@@ -11,7 +11,6 @@ implicit cursor — see ``documents.py`` for the rationale.
 
 from __future__ import annotations
 
-import json
 import sys
 from importlib.resources import files
 from pathlib import Path
@@ -436,9 +435,6 @@ async def patch_source(
     if edits is not None:
         if find is not None or replace is not None:
             raise ValueError("Use either find/replace OR edits, not both")
-        # LLMs sometimes serialize the list as a JSON string
-        if isinstance(edits, str):
-            edits = json.loads(edits)
         return documents.patch_source_batch(document_id, edits, validate=validate)
     if find is None or replace is None:
         raise ValueError("Provide either find+replace or edits")

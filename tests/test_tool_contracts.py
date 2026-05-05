@@ -465,6 +465,30 @@ class TestRenderingContracts:
         assert len(links) == 1
         assert links[0].mimeType == "application/pdf"
 
+    async def test_patch_source_batch_through_mcp_client(self, mcp_client) -> None:
+        """End-to-end: batch edits applied through the MCP server return
+        the correct PatchSourceResult shape."""
+        create_result = await mcp_client.call_tool("create_document", {"name": "Batch Doc"})
+        doc_id = _doc_id_from_create(create_result)
+        await mcp_client.call_tool(
+            "set_source",
+            {"document_id": doc_id, "source": "= Alpha\nBeta\n"},
+        )
+        result = await mcp_client.call_tool(
+            "patch_source",
+            {
+                "document_id": doc_id,
+                "edits": [
+                    {"find": "Alpha", "replace": "Apple"},
+                    {"find": "Beta", "replace": "Banana"},
+                ],
+            },
+        )
+        data = result.structured_content
+        assert data is not None
+        assert data["applied"] is True
+        assert data["compiled"] is True
+
 
 class TestExportResourceTemplate:
     """The collateral://exports/{export_id}.{ext} resource template works."""

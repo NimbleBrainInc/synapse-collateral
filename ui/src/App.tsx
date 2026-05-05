@@ -25,6 +25,22 @@ type DialogType =
   | "deleteDoc"
   | null;
 
+// Tools that change a document's rendered output. When one of these fires
+// we re-fetch the preview *if* it's plausibly the doc the user is viewing.
+// The platform's data.changed event doesn't carry the entity id, so this is
+// best-effort: an edit to a different document will still trigger one
+// recompile, but unrelated edits (voice, asset, font, template) won't.
+const DOCUMENT_MUTATING_TOOLS: ReadonlySet<string> = new Set([
+  "set_source",
+  "patch_source",
+  "set_theme",
+  "save_document",
+  "create_document",
+]);
+
+// Dwell before recompile fires; coalesces a burst of patch_source events.
+const PREVIEW_DEBOUNCE_MS = 300;
+
 export function App() {
   useInjectThemeTokens();
   const [tab, setTab] = useState<Tab>("documents");
@@ -79,14 +95,15 @@ export function App() {
     else refreshDocs();
   }, [tab, refreshDocs, refreshTemplates, refreshAssets]);
 
-  // Tools that change a document's rendered output. When one of these fires
-  // we re-fetch the preview *if* it's plausibly the doc the user is viewing.
-  // The platform's data.changed event doesn't carry the entity id, so this is
-  // best-effort: an edit to a different document will still trigger one
-  // recompile, but unrelated edits (voice, asset, font, template) won't.
-  const DOCUMENT_MUTATING_TOOLS = useRef(
-    new Set(["set_source", "patch_source", "set_theme", "save_document", "create_document"]),
-  );
+  // Track the live selection so the debounced preview can re-check at fire
+  // time and skip if the user has switched documents during the dwell.
+  // Without this, the timer would close over a stale id and flick the
+  // preview to the previous doc.
+  const selectedDocumentRef = useRef(selectedDocument);
+  useEffect(() => {
+    selectedDocumentRef.current = selectedDocument;
+  }, [selectedDocument]);
+
   const previewDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(
     () => () => {
@@ -100,14 +117,17 @@ export function App() {
     else if (tab === "assets") refreshAssets();
     else if (tab === "documents") {
       refreshDocs();
-      if (selectedDocument && DOCUMENT_MUTATING_TOOLS.current.has(event.tool)) {
-        // Coalesce a burst of edits (e.g. patch_source_batch follow-ups) into
-        // one recompile. 300ms is the dwell time before we recompile.
+      const targetId = selectedDocument;
+      if (targetId && DOCUMENT_MUTATING_TOOLS.has(event.tool)) {
         if (previewDebounce.current) clearTimeout(previewDebounce.current);
         previewDebounce.current = setTimeout(() => {
           previewDebounce.current = null;
-          if (selectedDocument) previewDocument(selectedDocument);
-        }, 300);
+          // Skip if the user has switched to another document during the
+          // dwell — handleSelectDocument already fired its own preview.
+          if (selectedDocumentRef.current === targetId) {
+            previewDocument(targetId);
+          }
+        }, PREVIEW_DEBOUNCE_MS);
       }
     }
   });
