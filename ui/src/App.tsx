@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDataSync, useVisibleState } from "@nimblebrain/synapse/react";
 import { s, tokens } from "./styles";
 import { useInjectThemeTokens } from "./theme-utils";
@@ -91,22 +91,37 @@ export function App() {
   });
 
   // Push visible UI state to the agent so chat messages like "fix this PDF"
-  // resolve to the document the user is actually looking at.
+  // resolve to the document the user is actually looking at. Only the entity
+  // for the *active* tab is reported — selection state on a hidden tab is
+  // stale from the user's perspective and should not be presented to the agent
+  // as "what they're pointing at".
+  const activeDoc = useMemo(
+    () =>
+      tab === "documents" && selectedDocument
+        ? (documents.find((d) => d.id === selectedDocument) ?? null)
+        : null,
+    [tab, selectedDocument, documents],
+  );
+  const activeTpl = useMemo(
+    () =>
+      tab === "templates" && selectedTemplate
+        ? (templates.find((t) => t.id === selectedTemplate) ?? null)
+        : null,
+    [tab, selectedTemplate, templates],
+  );
   useVisibleState(() => {
-    const doc = selectedDocument ? documents.find((d) => d.id === selectedDocument) : null;
-    const tpl = selectedTemplate ? templates.find((t) => t.id === selectedTemplate) : null;
     const parts = [`tab: ${tab}`];
-    if (doc) parts.push(`document: "${doc.name}" (id: ${doc.id})`);
-    else if (tpl) parts.push(`template: "${tpl.name}" (id: ${tpl.id})`);
+    if (activeDoc) parts.push(`document: "${activeDoc.name}" (id: ${activeDoc.id})`);
+    else if (activeTpl) parts.push(`template: "${activeTpl.name}" (id: ${activeTpl.id})`);
     return {
       state: {
         tab,
-        selectedDocument: doc ? { id: doc.id, name: doc.name } : null,
-        selectedTemplate: tpl ? { id: tpl.id, name: tpl.name } : null,
+        activeDocument: activeDoc ? { id: activeDoc.id, name: activeDoc.name } : null,
+        activeTemplate: activeTpl ? { id: activeTpl.id, name: activeTpl.name } : null,
       },
       summary: parts.join(" | "),
     };
-  }, [tab, selectedDocument, selectedTemplate, documents, templates]);
+  }, [tab, activeDoc?.id, activeDoc?.name, activeTpl?.id, activeTpl?.name]);
 
   const hasSelection = tab === "documents" ? !!selectedDocument : !!selectedTemplate;
 
