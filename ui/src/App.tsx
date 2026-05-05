@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useDataSync } from "@nimblebrain/synapse/react";
+import { useDataSync, useVisibleState } from "@nimblebrain/synapse/react";
 import { s, tokens } from "./styles";
 import { useInjectThemeTokens } from "./theme-utils";
 import { injectResponsiveStyles } from "./styles/responsive";
@@ -89,6 +89,24 @@ export function App() {
       if (selectedDocument) previewDocument();
     }
   });
+
+  // Push visible UI state to the agent so chat messages like "fix this PDF"
+  // resolve to the document the user is actually looking at.
+  useVisibleState(() => {
+    const doc = selectedDocument ? documents.find((d) => d.id === selectedDocument) : null;
+    const tpl = selectedTemplate ? templates.find((t) => t.id === selectedTemplate) : null;
+    const parts = [`tab: ${tab}`];
+    if (doc) parts.push(`document: "${doc.name}" (id: ${doc.id})`);
+    else if (tpl) parts.push(`template: "${tpl.name}" (id: ${tpl.id})`);
+    return {
+      state: {
+        tab,
+        selectedDocument: doc ? { id: doc.id, name: doc.name } : null,
+        selectedTemplate: tpl ? { id: tpl.id, name: tpl.name } : null,
+      },
+      summary: parts.join(" | "),
+    };
+  }, [tab, selectedDocument, selectedTemplate, documents, templates]);
 
   const hasSelection = tab === "documents" ? !!selectedDocument : !!selectedTemplate;
 
