@@ -118,23 +118,17 @@ class TestSource:
         assert pdf_path.exists()
         assert pdf_path.stat().st_size > 0
 
-    def test_set_source_failure_leaves_disk_untouched(
-        self, isolated_storage: Path
-    ) -> None:
+    def test_set_source_failure_leaves_disk_untouched(self, isolated_storage: Path) -> None:
         documents.create("Test")
         documents.set_source("test", "= Valid")
-        original_pdf = (
-            isolated_storage / "documents" / "test" / "output.pdf"
-        ).read_bytes()
+        original_pdf = (isolated_storage / "documents" / "test" / "output.pdf").read_bytes()
         with pytest.raises(RuntimeError, match="Typst compilation failed"):
             documents.set_source("test", "#let broken =")
         # Source on disk is the previous valid version
         src = (isolated_storage / "documents" / "test" / "source.typ").read_text()
         assert src == "= Valid"
         # PDF on disk is the previous valid version
-        assert (
-            isolated_storage / "documents" / "test" / "output.pdf"
-        ).read_bytes() == original_pdf
+        assert (isolated_storage / "documents" / "test" / "output.pdf").read_bytes() == original_pdf
 
 
 # ---------------------------------------------------------------------------
@@ -154,9 +148,7 @@ class TestPatch:
         src = (isolated_storage / "documents" / "t" / "source.typ").read_text()
         assert "Goodbye" in src
 
-    def test_patch_text_not_found_does_not_touch_disk(
-        self, isolated_storage: Path
-    ) -> None:
+    def test_patch_text_not_found_does_not_touch_disk(self, isolated_storage: Path) -> None:
         documents.create("T")
         documents.set_source("t", "= Hello\nText.")
         before = (isolated_storage / "documents" / "t" / "source.typ").read_text()
@@ -166,9 +158,7 @@ class TestPatch:
         after = (isolated_storage / "documents" / "t" / "source.typ").read_text()
         assert after == before
 
-    def test_patch_compile_error_does_not_touch_disk(
-        self, isolated_storage: Path
-    ) -> None:
+    def test_patch_compile_error_does_not_touch_disk(self, isolated_storage: Path) -> None:
         documents.create("T")
         documents.set_source("t", "= Hello\nBody.")
         before_src = (isolated_storage / "documents" / "t" / "source.typ").read_text()
@@ -177,12 +167,8 @@ class TestPatch:
         assert result.applied is False
         assert result.reason == "compile_error"
         # Both source and PDF unchanged
-        assert (
-            isolated_storage / "documents" / "t" / "source.typ"
-        ).read_text() == before_src
-        assert (
-            isolated_storage / "documents" / "t" / "output.pdf"
-        ).read_bytes() == before_pdf
+        assert (isolated_storage / "documents" / "t" / "source.typ").read_text() == before_src
+        assert (isolated_storage / "documents" / "t" / "output.pdf").read_bytes() == before_pdf
 
     def test_patch_batch_sequential(self, isolated_storage: Path) -> None:
         documents.create("T")
@@ -198,17 +184,11 @@ class TestPatch:
         src = (isolated_storage / "documents" / "t" / "source.typ").read_text()
         assert "New Title" in src and "Line X" in src
 
-    def test_patch_validate_false_writes_source_keeps_old_pdf(
-        self, isolated_storage: Path
-    ) -> None:
+    def test_patch_validate_false_writes_source_keeps_old_pdf(self, isolated_storage: Path) -> None:
         documents.create("T")
         documents.set_source("t", "= Hello\nText.")
-        old_pdf_mtime = (
-            isolated_storage / "documents" / "t" / "output.pdf"
-        ).stat().st_mtime
-        result = documents.patch_source(
-            "t", "Hello", "Stage Without Compile", validate=False
-        )
+        old_pdf_mtime = (isolated_storage / "documents" / "t" / "output.pdf").stat().st_mtime
+        result = documents.patch_source("t", "Hello", "Stage Without Compile", validate=False)
         assert result.applied is True
         assert result.compiled is False
         # Source updated; PDF NOT updated (still old mtime)
@@ -216,9 +196,7 @@ class TestPatch:
             "Stage Without Compile"
             in (isolated_storage / "documents" / "t" / "source.typ").read_text()
         )
-        new_pdf_mtime = (
-            isolated_storage / "documents" / "t" / "output.pdf"
-        ).stat().st_mtime
+        new_pdf_mtime = (isolated_storage / "documents" / "t" / "output.pdf").stat().st_mtime
         assert new_pdf_mtime == old_pdf_mtime  # not rewritten
 
 
@@ -231,9 +209,7 @@ class TestIsolation:
     """The whole point of this refactor: tools targeting doc A never
     accidentally write to doc B."""
 
-    def test_set_source_on_a_does_not_change_b(
-        self, isolated_storage: Path
-    ) -> None:
+    def test_set_source_on_a_does_not_change_b(self, isolated_storage: Path) -> None:
         documents.create("Doc A")
         documents.create("Doc B")
         documents.set_source("doc-a", "= I am A\n")
@@ -251,9 +227,7 @@ class TestIsolation:
         assert "Bananas" in documents.get_source("b").source
         assert "Avocados" not in documents.get_source("b").source
 
-    def test_interleaved_edits_target_correct_documents(
-        self, isolated_storage: Path
-    ) -> None:
+    def test_interleaved_edits_target_correct_documents(self, isolated_storage: Path) -> None:
         """Mirrors the production incident: agent appears to be working on
         Nuve while the cursor has drifted to IPinfo. With explicit IDs,
         interleaving is safe by construction."""
@@ -293,9 +267,7 @@ class TestRender:
         documents.render_pdf("t")
         assert pdf_path.stat().st_mtime == original_mtime  # cache hit, no rewrite
 
-    def test_render_recompiles_when_source_newer_than_pdf(
-        self, isolated_storage: Path
-    ) -> None:
+    def test_render_recompiles_when_source_newer_than_pdf(self, isolated_storage: Path) -> None:
         """When source.typ is newer than output.pdf (e.g. after a
         validate=False patch), render_pdf must recompile and refresh the
         cache rather than serve the stale PDF."""
@@ -322,12 +294,9 @@ class TestRender:
 
 class TestTheme:
     def test_set_theme_updates_source(self, isolated_storage: Path) -> None:
-        templates = documents.list_all()
-        # Pick a template that has a theme block
         from mcp_collateral import templates as tmod
 
-        all_templates = tmod.list_templates()
-        has_theme = next((t for t in all_templates if t.id == "one-pager"), None)
+        has_theme = next((t for t in tmod.list_templates() if t.id == "one-pager"), None)
         if has_theme is None:
             pytest.skip("one-pager template not seeded")
         documents.create("Themed", template_id="one-pager")

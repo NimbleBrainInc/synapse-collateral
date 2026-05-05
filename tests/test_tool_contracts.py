@@ -1,10 +1,8 @@
 """Tool contract tests — verify return shapes match what the UI expects.
 
-These tests are the contract between the Python server and the TypeScript UI.
-If a return type changes here, the UI types in ui/src/App.tsx must be updated.
-
-Rewritten for v3: no references to configure_brand, BrandConfig, BrandPresetInfo,
-or StarterInfo. Theme is parsed from Typst source, not a brand.json.
+These tests are the contract between the Python server and the TypeScript
+UI. If a return type changes here, the UI types in ``ui/src/types.ts``
+must be updated.
 """
 
 from __future__ import annotations
@@ -15,25 +13,24 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 
+from mcp_collateral import documents, workspace
 from mcp_collateral.models import (
     DocumentInfo,
+    DocumentState,
     PatchSourceResult,
     TemplateInfo,
-    DocumentState,
 )
 
-# 1x1 PNG bytes for upload_asset contract tests (upload_asset now validates).
+# 1x1 PNG bytes for upload_asset contract tests (upload_asset validates).
 _VALID_PNG = base64.b64decode(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAj"
-    "CB0C8AAAAASUVORK5CYII="
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
 )
 _VALID_PNG_B64 = base64.b64encode(_VALID_PNG).decode()
-from mcp_collateral.workspace import Workspace
 
 
 @pytest.fixture()
-def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Workspace:
-    """Create a workspace with isolated storage."""
+def isolated_storage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Point all storage roots at tmp_path. Returns the storage root."""
     monkeypatch.setattr("mcp_collateral.store.BASE_DIR", tmp_path)
     monkeypatch.setattr("mcp_collateral.store.ASSETS_DIR", tmp_path / "assets")
     monkeypatch.setattr("mcp_collateral.store.FONTS_DIR", tmp_path / "fonts")
@@ -46,13 +43,11 @@ def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Workspace:
 
     monkeypatch.setattr(tmod, "_seeded", False)
 
-    # Create dirs and seed templates
     from mcp_collateral import store
 
     store._ensure_dirs()
     store.seed_templates()
-
-    return Workspace()
+    return tmp_path
 
 
 # ---------------------------------------------------------------------------
@@ -63,23 +58,25 @@ def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Workspace:
 class TestThemeContracts:
     """get_theme returns dict with colors/fonts/spacing; set_theme returns DocumentState."""
 
-    def test_get_theme_returns_dict_with_expected_keys(self, workspace: Workspace) -> None:
-        result = workspace.get_theme()
+    def test_get_theme_returns_dict_with_expected_keys(self, isolated_storage: Path) -> None:
+        documents.create("Test")
+        result = documents.get_theme("test")
         assert isinstance(result, dict)
         assert "colors" in result
         assert "fonts" in result
         assert "spacing" in result
 
-    def test_get_theme_values_are_dicts(self, workspace: Workspace) -> None:
-        result = workspace.get_theme()
+    def test_get_theme_values_are_dicts(self, isolated_storage: Path) -> None:
+        documents.create("Test")
+        result = documents.get_theme("test")
         assert isinstance(result["colors"], dict)
         assert isinstance(result["fonts"], dict)
         assert isinstance(result["spacing"], dict)
 
-    def test_set_theme_returns_workspace_state(self, workspace: Workspace) -> None:
+    def test_set_theme_returns_document_state(self, isolated_storage: Path) -> None:
         # Create a doc with a template that has a theme block
-        workspace.create_document("Test", template_id="one-pager")
-        result = workspace.set_theme({"accent": "#ff0000"})
+        documents.create("Test", template_id="one-pager")
+        result = documents.set_theme("test", {"accent": "#ff0000"})
         assert isinstance(result, DocumentState)
 
 
@@ -91,46 +88,58 @@ class TestThemeContracts:
 class TestTemplateContracts:
     """list_templates returns list[TemplateInfo]; create/duplicate/delete work."""
 
-    def test_list_templates_returns_list(self, workspace: Workspace) -> None:
-        result = workspace.list_templates()
+    def test_list_templates_returns_list(self, isolated_storage: Path) -> None:
+        from mcp_collateral import templates as tmod
+
+        result = tmod.list_templates()
         assert isinstance(result, list)
         assert len(result) >= 1  # seed templates
 
-    def test_list_templates_items_are_template_info(self, workspace: Workspace) -> None:
-        result = workspace.list_templates()
+    def test_list_templates_items_are_template_info(self, isolated_storage: Path) -> None:
+        from mcp_collateral import templates as tmod
+
+        result = tmod.list_templates()
         for t in result:
             assert isinstance(t, TemplateInfo)
             assert isinstance(t.id, str)
             assert isinstance(t.name, str)
             assert isinstance(t.page_count, int)
 
-    def test_create_template_returns_template_info(self, workspace: Workspace) -> None:
-        result = workspace.create_template("test-tpl", "Test", "A test", "// source")
+    def test_create_template_returns_template_info(self, isolated_storage: Path) -> None:
+        from mcp_collateral import templates as tmod
+
+        result = tmod.create_template("test-tpl", "Test", "// source", "A test")
         assert isinstance(result, TemplateInfo)
         assert result.id == "test-tpl"
         assert result.name == "Test"
 
-    def test_duplicate_template_returns_template_info(self, workspace: Workspace) -> None:
-        templates = workspace.list_templates()
-        first_id = templates[0].id
-        result = workspace.duplicate_template(first_id, f"{first_id}-copy", "Copy")
+    def test_duplicate_template_returns_template_info(self, isolated_storage: Path) -> None:
+        from mcp_collateral import templates as tmod
+
+        templates_list = tmod.list_templates()
+        first_id = templates_list[0].id
+        result = tmod.duplicate_template(first_id, f"{first_id}-copy", "Copy")
         assert isinstance(result, TemplateInfo)
         assert result.id == f"{first_id}-copy"
 
-    def test_delete_template_removes_it(self, workspace: Workspace) -> None:
-        workspace.create_template("to-delete", "Delete Me", "desc", "// src")
-        workspace.delete_template("to-delete")
-        ids = [t.id for t in workspace.list_templates()]
+    def test_delete_template_removes_it(self, isolated_storage: Path) -> None:
+        from mcp_collateral import templates as tmod
+
+        tmod.create_template("to-delete", "Delete Me", "// src", "desc")
+        tmod.delete_template("to-delete")
+        ids = [t.id for t in tmod.list_templates()]
         assert "to-delete" not in ids
 
-    def test_save_as_template_returns_template_info(self, workspace: Workspace) -> None:
-        templates = workspace.list_templates()
-        if templates:
-            workspace.create_document("Test", template_id=templates[0].id)
+    def test_save_as_template_returns_template_info(self, isolated_storage: Path) -> None:
+        from mcp_collateral import templates as tmod
+
+        templates_list = tmod.list_templates()
+        if templates_list:
+            documents.create("Test", template_id=templates_list[0].id)
         else:
-            workspace.create_document("Test")
-            workspace.set_source("= Real content here")
-        result = workspace.save_as_template("My Template", "desc")
+            documents.create("Test")
+            documents.set_source("test", "= Real content here")
+        result = documents.save_as_template("test", "My Template", "desc")
         assert isinstance(result, TemplateInfo)
 
 
@@ -142,40 +151,41 @@ class TestTemplateContracts:
 class TestDocumentContracts:
     """Document tools return DocumentState or DocumentInfo."""
 
-    def test_create_document_returns_workspace_state(self, workspace: Workspace) -> None:
-        result = workspace.create_document("Test Doc")
+    def test_create_document_returns_document_state(self, isolated_storage: Path) -> None:
+        result = documents.create("Test Doc")
         assert isinstance(result, DocumentState)
         assert result.document_id is not None
         assert result.template_id is None
 
-    def test_create_document_with_template_has_template_id(self, workspace: Workspace) -> None:
-        templates = workspace.list_templates()
-        if not templates:
+    def test_create_document_with_template_has_template_id(self, isolated_storage: Path) -> None:
+        from mcp_collateral import templates as tmod
+
+        templates_list = tmod.list_templates()
+        if not templates_list:
             pytest.skip("No seed templates available")
-        result = workspace.create_document("Test", template_id=templates[0].id)
+        result = documents.create("Test", template_id=templates_list[0].id)
         assert isinstance(result, DocumentState)
-        assert result.template_id == templates[0].id
+        assert result.template_id == templates_list[0].id
         assert result.document_id is not None
 
-    def test_list_documents_returns_list_of_document_info(self, workspace: Workspace) -> None:
-        result = workspace.list_documents()
+    def test_list_documents_returns_list_of_document_info(self, isolated_storage: Path) -> None:
+        result = documents.list_all()
         assert isinstance(result, list)
         for d in result:
             assert isinstance(d, DocumentInfo)
 
-    def test_save_document_returns_document_info(self, workspace: Workspace) -> None:
-        workspace.create_document("Test")
-        result = workspace.save_document()
+    def test_save_document_returns_document_info(self, isolated_storage: Path) -> None:
+        documents.create("Test")
+        result = documents.save("test")
         assert isinstance(result, DocumentInfo)
         assert result.id == "test"
 
-    def test_get_state_returns_workspace_state(self, workspace: Workspace) -> None:
-        result = workspace.get_state()
+    def test_get_document_returns_document_state(self, isolated_storage: Path) -> None:
+        documents.create("Test")
+        result = documents.get("test")
         assert isinstance(result, DocumentState)
         assert hasattr(result, "template_id")
         assert hasattr(result, "theme")
-        # v3: no starter_id
-        assert not hasattr(result, "starter_id")
 
 
 # ---------------------------------------------------------------------------
@@ -186,15 +196,15 @@ class TestDocumentContracts:
 class TestEditingContracts:
     """set_source returns DocumentState; patch_source returns PatchSourceResult."""
 
-    def test_set_source_returns_workspace_state(self, workspace: Workspace) -> None:
-        workspace.create_document("Test")
-        result = workspace.set_source("#set text(size: 12pt)\n= Hello")
+    def test_set_source_returns_document_state(self, isolated_storage: Path) -> None:
+        documents.create("Test")
+        result = documents.set_source("test", "#set text(size: 12pt)\n= Hello")
         assert isinstance(result, DocumentState)
 
-    def test_patch_source_returns_patch_result(self, workspace: Workspace) -> None:
-        workspace.create_document("Test")
-        workspace.set_source("#set text(size: 12pt)\n= Hello")
-        result = workspace.patch_source("Hello", "World")
+    def test_patch_source_returns_patch_result(self, isolated_storage: Path) -> None:
+        documents.create("Test")
+        documents.set_source("test", "#set text(size: 12pt)\n= Hello")
+        result = documents.patch_source("test", "Hello", "World")
         assert isinstance(result, PatchSourceResult)
         assert result.applied is True
         assert result.compiled is True
@@ -209,29 +219,29 @@ class TestEditingContracts:
 class TestAssetContracts:
     """Asset tools: list_assets -> list[str], upload_asset -> dict."""
 
-    def test_list_assets_returns_list_of_str(self, workspace: Workspace) -> None:
+    def test_list_assets_returns_list_of_str(self, isolated_storage: Path) -> None:
         result = workspace.list_assets()
         assert isinstance(result, list)
         for item in result:
             assert isinstance(item, str)
 
-    def test_upload_asset_returns_dict(self, workspace: Workspace) -> None:
+    def test_upload_asset_returns_dict(self, isolated_storage: Path) -> None:
         result = workspace.upload_asset(_VALID_PNG_B64, "test.png")
         assert isinstance(result, dict)
         assert "filename" in result
 
-    def test_upload_then_list_assets(self, workspace: Workspace) -> None:
+    def test_upload_then_list_assets(self, isolated_storage: Path) -> None:
         workspace.upload_asset(_VALID_PNG_B64, "logo.png")
         result = workspace.list_assets()
         assert "logo.png" in result
 
-    def test_delete_asset_returns_dict(self, workspace: Workspace) -> None:
+    def test_delete_asset_returns_dict(self, isolated_storage: Path) -> None:
         workspace.upload_asset(_VALID_PNG_B64, "temp.png")
         result = workspace.delete_asset("temp.png")
         assert isinstance(result, dict)
         assert result["status"] == "deleted"
 
-    def test_asset_filename_sanitization(self, workspace: Workspace) -> None:
+    def test_asset_filename_sanitization(self, isolated_storage: Path) -> None:
         # Bytes are valid; filename traversal is what's being tested.
         with pytest.raises(ValueError, match="Invalid"):
             workspace.upload_asset(_VALID_PNG_B64, "../etc/passwd")
@@ -245,16 +255,16 @@ class TestAssetContracts:
 class TestVoiceContracts:
     """get_voice -> str, set_voice -> dict."""
 
-    def test_get_voice_returns_str(self, workspace: Workspace) -> None:
+    def test_get_voice_returns_str(self, isolated_storage: Path) -> None:
         result = workspace.get_voice()
         assert isinstance(result, str)
 
-    def test_set_voice_returns_dict(self, workspace: Workspace) -> None:
+    def test_set_voice_returns_dict(self, isolated_storage: Path) -> None:
         result = workspace.set_voice("Be direct.")
         assert isinstance(result, dict)
         assert "status" in result
 
-    def test_voice_roundtrip(self, workspace: Workspace) -> None:
+    def test_voice_roundtrip(self, isolated_storage: Path) -> None:
         workspace.set_voice("Be concise.")
         result = workspace.get_voice()
         assert result == "Be concise."
@@ -268,16 +278,16 @@ class TestVoiceContracts:
 class TestComponentContracts:
     """get_components -> str, set_components -> dict."""
 
-    def test_get_components_returns_str(self, workspace: Workspace) -> None:
+    def test_get_components_returns_str(self, isolated_storage: Path) -> None:
         result = workspace.get_components()
         assert isinstance(result, str)
 
-    def test_set_components_returns_dict(self, workspace: Workspace) -> None:
+    def test_set_components_returns_dict(self, isolated_storage: Path) -> None:
         result = workspace.set_components("#let foo(x) = x")
         assert isinstance(result, dict)
         assert "status" in result
 
-    def test_components_roundtrip(self, workspace: Workspace) -> None:
+    def test_components_roundtrip(self, isolated_storage: Path) -> None:
         workspace.set_components("#let bar(x) = x")
         result = workspace.get_components()
         assert "#let bar(x) = x" in result
@@ -291,13 +301,13 @@ class TestComponentContracts:
 class TestFontContracts:
     """list_fonts -> list[str]."""
 
-    def test_list_fonts_returns_list_of_str(self, workspace: Workspace) -> None:
+    def test_list_fonts_returns_list_of_str(self, isolated_storage: Path) -> None:
         result = workspace.list_fonts()
         assert isinstance(result, list)
         for item in result:
             assert isinstance(item, str)
 
-    def test_install_font_returns_dict(self, workspace: Workspace) -> None:
+    def test_install_font_returns_dict(self, isolated_storage: Path) -> None:
         data = base64.b64encode(b"\x00\x01\x00\x00").decode()
         result = workspace.install_font(base64_data=data, filename="test.ttf")
         assert isinstance(result, dict)
@@ -330,9 +340,6 @@ async def mcp_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     store._ensure_dirs()
     store.seed_templates()
 
-    # Replace the module-level workspace so tools use isolated storage.
-    monkeypatch.setattr(server_mod, "_ws", Workspace())
-
     from fastmcp import Client
 
     async with Client(server_mod.mcp) as client:
@@ -348,13 +355,20 @@ def _result_byte_size(result) -> int:
     return total
 
 
+def _doc_id_from_create(result) -> str:
+    """Extract document_id from a create_document tool result."""
+    data = result.structured_content
+    return data["document_id"] if isinstance(data, dict) else data.document_id
+
+
 @pytest.mark.asyncio
 class TestRenderingContracts:
     """Preview/export tools return small results with resource_link blocks."""
 
     async def test_preview_returns_pdf_resource_link(self, mcp_client) -> None:
-        await mcp_client.call_tool("create_document", {"name": "Preview Doc"})
-        result = await mcp_client.call_tool("preview", {})
+        create_result = await mcp_client.call_tool("create_document", {"name": "Preview Doc"})
+        doc_id = _doc_id_from_create(create_result)
+        result = await mcp_client.call_tool("preview", {"document_id": doc_id})
 
         assert _result_byte_size(result) < 10_000
 
@@ -376,8 +390,9 @@ class TestRenderingContracts:
         assert data["export_id"].startswith("exp_")
 
     async def test_preview_resource_link_fetches_pdf(self, mcp_client) -> None:
-        await mcp_client.call_tool("create_document", {"name": "Fetch Doc"})
-        result = await mcp_client.call_tool("preview", {})
+        create_result = await mcp_client.call_tool("create_document", {"name": "Fetch Doc"})
+        doc_id = _doc_id_from_create(create_result)
+        result = await mcp_client.call_tool("preview", {"document_id": doc_id})
         link = next(b for b in result.content if getattr(b, "type", None) == "resource_link")
 
         contents = await mcp_client.read_resource(str(link.uri))
@@ -409,8 +424,9 @@ class TestRenderingContracts:
         assert link.mimeType == "application/pdf"
 
     async def test_export_pdf_returns_resource_link(self, mcp_client) -> None:
-        await mcp_client.call_tool("create_document", {"name": "Export Doc"})
-        result = await mcp_client.call_tool("export_pdf", {})
+        create_result = await mcp_client.call_tool("create_document", {"name": "Export Doc"})
+        doc_id = _doc_id_from_create(create_result)
+        result = await mcp_client.call_tool("export_pdf", {"document_id": doc_id})
 
         assert _result_byte_size(result) < 10_000
 
@@ -428,8 +444,9 @@ class TestRenderingContracts:
         assert data["export_id"].startswith("exp_")
 
     async def test_export_pdf_resource_link_fetches_pdf(self, mcp_client) -> None:
-        await mcp_client.call_tool("create_document", {"name": "Fetch PDF"})
-        result = await mcp_client.call_tool("export_pdf", {})
+        create_result = await mcp_client.call_tool("create_document", {"name": "Fetch PDF"})
+        doc_id = _doc_id_from_create(create_result)
+        result = await mcp_client.call_tool("export_pdf", {"document_id": doc_id})
         link = next(b for b in result.content if getattr(b, "type", None) == "resource_link")
 
         contents = await mcp_client.read_resource(str(link.uri))
@@ -452,10 +469,7 @@ class TestRenderingContracts:
 class TestExportResourceTemplate:
     """The collateral://exports/{export_id}.{ext} resource template works."""
 
-    def test_store_and_load_export_roundtrip(self, workspace: Workspace, tmp_path: Path) -> None:
-        # Unused workspace fixture just isolates store.BASE_DIR.
-        del workspace
-
+    def test_store_and_load_export_roundtrip(self, isolated_storage: Path) -> None:
         from mcp_collateral.workspace import load_export, store_export
 
         export_id, path = store_export(b"hello bytes", "pdf")
@@ -463,8 +477,7 @@ class TestExportResourceTemplate:
         assert export_id.startswith("exp_")
         assert load_export(export_id, "pdf") == b"hello bytes"
 
-    def test_load_export_missing_returns_none(self, workspace: Workspace) -> None:
-        del workspace
+    def test_load_export_missing_returns_none(self, isolated_storage: Path) -> None:
         from mcp_collateral.workspace import load_export
 
         assert load_export("exp_missing", "pdf") is None
@@ -473,8 +486,7 @@ class TestExportResourceTemplate:
 class TestAssetResourceTemplate:
     """The collateral://assets/{filename} resource template works."""
 
-    def test_asset_resource_returns_bytes_and_mime(self, workspace: Workspace) -> None:
-        del workspace
+    def test_asset_resource_returns_bytes_and_mime(self, isolated_storage: Path) -> None:
         from mcp_collateral import server, store
 
         store.ASSETS_DIR.mkdir(parents=True, exist_ok=True)
@@ -486,8 +498,7 @@ class TestAssetResourceTemplate:
         assert content.mime_type == "image/png"
         assert content.content.startswith(b"\x89PNG")
 
-    def test_asset_resource_mime_per_extension(self, workspace: Workspace) -> None:
-        del workspace
+    def test_asset_resource_mime_per_extension(self, isolated_storage: Path) -> None:
         from mcp_collateral import server, store
 
         store.ASSETS_DIR.mkdir(parents=True, exist_ok=True)
@@ -502,16 +513,14 @@ class TestAssetResourceTemplate:
             result = server.collateral_asset(filename)
             assert result.contents[0].mime_type == expected_mime, filename
 
-    def test_asset_resource_missing_returns_empty(self, workspace: Workspace) -> None:
-        del workspace
+    def test_asset_resource_missing_returns_empty(self, isolated_storage: Path) -> None:
         from mcp_collateral import server
 
         result = server.collateral_asset("does-not-exist.png")
         assert len(result.contents) == 1
         assert result.contents[0].content == b""
 
-    def test_asset_resource_refuses_directory(self, workspace: Workspace) -> None:
-        del workspace
+    def test_asset_resource_refuses_directory(self, isolated_storage: Path) -> None:
         from mcp_collateral import server, store
 
         store.ASSETS_DIR.mkdir(parents=True, exist_ok=True)
@@ -520,8 +529,7 @@ class TestAssetResourceTemplate:
         result = server.collateral_asset("a-folder")
         assert result.contents[0].content == b""
 
-    def test_asset_resource_rejects_path_traversal(self, workspace: Workspace) -> None:
-        del workspace
+    def test_asset_resource_rejects_path_traversal(self, isolated_storage: Path) -> None:
         from mcp_collateral import server
 
         # Classic dot-dot escape
@@ -540,26 +548,26 @@ class TestAssetResourceTemplate:
 class TestAutoSaveContract:
     """Edits auto-save and write output.pdf to disk."""
 
-    def test_set_source_writes_output_pdf(self, workspace: Workspace, tmp_path: Path) -> None:
-        workspace.create_document("Test")
-        workspace.set_source("#set text(size: 12pt)\n= Saved")
-        pdf_path = tmp_path / "documents" / "test" / "output.pdf"
+    def test_set_source_writes_output_pdf(self, isolated_storage: Path) -> None:
+        documents.create("Test")
+        documents.set_source("test", "#set text(size: 12pt)\n= Saved")
+        pdf_path = isolated_storage / "documents" / "test" / "output.pdf"
         assert pdf_path.exists()
         assert pdf_path.stat().st_size > 0
 
-    def test_patch_source_writes_output_pdf(self, workspace: Workspace, tmp_path: Path) -> None:
-        workspace.create_document("Test")
-        workspace.set_source("#set text(size: 12pt)\n= Hello")
-        workspace.patch_source("Hello", "Patched")
-        pdf_path = tmp_path / "documents" / "test" / "output.pdf"
+    def test_patch_source_writes_output_pdf(self, isolated_storage: Path) -> None:
+        documents.create("Test")
+        documents.set_source("test", "#set text(size: 12pt)\n= Hello")
+        documents.patch_source("test", "Hello", "Patched")
+        pdf_path = isolated_storage / "documents" / "test" / "output.pdf"
         assert pdf_path.exists()
         assert pdf_path.stat().st_size > 0
 
-    def test_patch_source_auto_saves_source(self, workspace: Workspace, tmp_path: Path) -> None:
-        workspace.create_document("Test")
-        workspace.set_source("#set text(size: 12pt)\n= Hello")
-        workspace.patch_source("Hello", "Saved")
-        source_path = tmp_path / "documents" / "test" / "source.typ"
+    def test_patch_source_auto_saves_source(self, isolated_storage: Path) -> None:
+        documents.create("Test")
+        documents.set_source("test", "#set text(size: 12pt)\n= Hello")
+        documents.patch_source("test", "Hello", "Saved")
+        source_path = isolated_storage / "documents" / "test" / "source.typ"
         assert source_path.exists()
         assert "Saved" in source_path.read_text()
 
