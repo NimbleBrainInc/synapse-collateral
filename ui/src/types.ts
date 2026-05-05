@@ -2,9 +2,9 @@
 // Run: uv run python scripts/gen-types.py > ui/src/types.ts
 
 export interface ThemeData {
-  colors?: dict[str, str];
-  fonts?: dict[str, str];
-  spacing?: dict[str, str];
+  colors?: Record<string, string>;
+  fonts?: Record<string, string>;
+  spacing?: Record<string, string>;
 }
 
 export interface VariableDefinition {

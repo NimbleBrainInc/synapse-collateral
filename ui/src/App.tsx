@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDataSync, useVisibleState } from "@nimblebrain/synapse/react";
 import { s, tokens } from "./styles";
 import { useInjectThemeTokens } from "./theme-utils";
@@ -33,7 +33,6 @@ export function App() {
     documents,
     refresh: refreshDocs,
     create: createDoc,
-    open: openDoc,
     save: saveDoc,
     remove: removeDoc,
     saveAsTemplate: saveDocAsTemplate,
@@ -80,12 +79,36 @@ export function App() {
     else refreshDocs();
   }, [tab, refreshDocs, refreshTemplates, refreshAssets]);
 
-  useDataSync(() => {
+  // Tools that change a document's rendered output. When one of these fires
+  // we re-fetch the preview *if* it's plausibly the doc the user is viewing.
+  // The platform's data.changed event doesn't carry the entity id, so this is
+  // best-effort: an edit to a different document will still trigger one
+  // recompile, but unrelated edits (voice, asset, font, template) won't.
+  const DOCUMENT_MUTATING_TOOLS = useRef(
+    new Set(["set_source", "patch_source", "set_theme", "save_document", "create_document"]),
+  );
+  const previewDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (previewDebounce.current) clearTimeout(previewDebounce.current);
+    },
+    [],
+  );
+
+  useDataSync((event) => {
     if (tab === "templates") refreshTemplates();
     else if (tab === "assets") refreshAssets();
     else if (tab === "documents") {
       refreshDocs();
-      if (selectedDocument) previewDocument();
+      if (selectedDocument && DOCUMENT_MUTATING_TOOLS.current.has(event.tool)) {
+        // Coalesce a burst of edits (e.g. patch_source_batch follow-ups) into
+        // one recompile. 300ms is the dwell time before we recompile.
+        if (previewDebounce.current) clearTimeout(previewDebounce.current);
+        previewDebounce.current = setTimeout(() => {
+          previewDebounce.current = null;
+          if (selectedDocument) previewDocument(selectedDocument);
+        }, 300);
+      }
     }
   });
 
@@ -129,13 +152,12 @@ export function App() {
       setSelectedDocument(id);
       setSelectedTemplate(null);
       try {
-        await openDoc(id);
-        await previewDocument();
+        await previewDocument(id);
       } catch (e) {
         setPreviewError(e instanceof Error ? e.message : "Failed to open");
       }
     },
-    [openDoc, previewDocument, setPreviewError],
+    [previewDocument, setPreviewError],
   );
 
   const handleSelectTemplate = useCallback(
@@ -160,12 +182,14 @@ export function App() {
       const args: { name: string; template_id?: string } = { name };
       if (dialogTemplate) args.template_id = dialogTemplate;
       const ws = await createDoc(args);
+      const newId = ws.document_id;
       setDialogType(null);
-      setSelectedDocument(ws.document_id);
+      setSelectedDocument(newId);
       setSelectedTemplate(null);
       setDialogTemplate("");
       setTab("documents");
-      await Promise.all([refreshDocs(), previewDocument()]);
+      await refreshDocs();
+      if (newId) await previewDocument(newId);
     } catch (e) {
       setPreviewError(e instanceof Error ? e.message : "Failed to create document");
     }
@@ -222,10 +246,10 @@ export function App() {
 
   const handleSaveAsTemplate = async () => {
     const name = dialogName.trim();
-    if (!name) return;
+    if (!name || !selectedDocument) return;
     setDialogType(null);
     try {
-      await saveDocAsTemplate({ name, description: dialogDesc.trim() });
+      await saveDocAsTemplate(selectedDocument, name, dialogDesc.trim());
       await refreshTemplates();
     } catch (e) {
       setPreviewError(e instanceof Error ? e.message : "Failed to save as template");
@@ -252,7 +276,7 @@ export function App() {
     if (!name || !selectedDocument) return;
     setDialogType(null);
     try {
-      await saveDoc({ name });
+      await saveDoc(selectedDocument, name);
       await refreshDocs();
     } catch (e) {
       setPreviewError(e instanceof Error ? e.message : "Rename failed");

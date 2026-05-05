@@ -13,15 +13,20 @@ export interface DocumentState {
   document_id: string | null;
   document_name: string | null;
   template_id: string | null;
-  source: string;
-  sections: unknown[];
-  has_cache: boolean;
+  theme?: {
+    colors: Record<string, string>;
+    fonts: Record<string, string>;
+    spacing: Record<string, string>;
+  };
 }
 
+/**
+ * Document operations bound to the stateless server contract: every
+ * write takes ``document_id`` explicitly. There is no implicit cursor.
+ */
 export function useDocuments() {
   const { call: listCall } = useCallTool<DocumentInfo[]>("list_documents");
   const { call: createCall } = useCallTool<DocumentState>("create_document");
-  const { call: openCall } = useCallTool<DocumentState>("open_document");
   const { call: saveCall } = useCallTool<DocumentInfo>("save_document");
   const { call: deleteCall } = useCallTool<string>("delete_document");
   const { call: saveAsTemplateCall } = useCallTool("save_as_template");
@@ -45,16 +50,10 @@ export function useDocuments() {
     [createCall],
   );
 
-  const open = useCallback(
-    async (documentId: string): Promise<DocumentState> => {
-      const result = await openCall({ document_id: documentId });
-      return result.data as DocumentState;
-    },
-    [openCall],
-  );
-
   const save = useCallback(
-    async (args: Record<string, unknown> = {}): Promise<DocumentInfo> => {
+    async (documentId: string, name?: string): Promise<DocumentInfo> => {
+      const args: Record<string, unknown> = { document_id: documentId };
+      if (name !== undefined) args.name = name;
       const result = await saveCall(args);
       return result.data as DocumentInfo;
     },
@@ -69,11 +68,13 @@ export function useDocuments() {
   );
 
   const saveAsTemplate = useCallback(
-    async (args: { name: string; description?: string }) => {
-      await saveAsTemplateCall(args as Record<string, unknown>);
+    async (documentId: string, name: string, description?: string) => {
+      const args: Record<string, unknown> = { document_id: documentId, name };
+      if (description !== undefined) args.description = description;
+      await saveAsTemplateCall(args);
     },
     [saveAsTemplateCall],
   );
 
-  return { documents, refresh, create, open, save, remove, saveAsTemplate };
+  return { documents, refresh, create, save, remove, saveAsTemplate };
 }

@@ -60,9 +60,15 @@ export function usePreview() {
     [synapse],
   );
 
-  const previewDocument = useCallback(async () => {
-    await runPreviewTool(() => previewCall({}), "Preview failed");
-  }, [previewCall, runPreviewTool]);
+  const previewDocument = useCallback(
+    async (documentId: string) => {
+      await runPreviewTool(
+        () => previewCall({ document_id: documentId }),
+        "Preview failed",
+      );
+    },
+    [previewCall, runPreviewTool],
+  );
 
   const previewTemplate = useCallback(
     async (templateId: string) => {
