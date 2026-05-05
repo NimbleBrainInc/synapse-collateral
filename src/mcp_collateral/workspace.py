@@ -110,13 +110,12 @@ def import_content(base64_data: str, filename: str) -> str:
             doc.close()
             return "\n\n".join(pages)
         except ImportError:
-            # Fallback: crude extraction of parenthesized strings from PDF
-            lines: list[str] = []
-            for match in re.finditer(rb"\(([^)]+)\)", data):
-                try:
-                    lines.append(match.group(1).decode("utf-8", errors="replace"))
-                except Exception:
-                    pass
+            # Fallback: crude extraction of parenthesized strings from PDF.
+            # decode(errors="replace") never raises, so no try/except needed.
+            lines = [
+                match.group(1).decode("utf-8", errors="replace")
+                for match in re.finditer(rb"\(([^)]+)\)", data)
+            ]
             if lines:
                 return "\n".join(lines)
             return data.decode("latin-1", errors="replace")

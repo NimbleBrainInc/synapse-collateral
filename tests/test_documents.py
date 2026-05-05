@@ -184,20 +184,28 @@ class TestPatch:
         src = (isolated_storage / "documents" / "t" / "source.typ").read_text()
         assert "New Title" in src and "Line X" in src
 
-    def test_patch_validate_false_writes_source_keeps_old_pdf(self, isolated_storage: Path) -> None:
+    def test_patch_validate_false_writes_source_invalidates_pdf(
+        self, isolated_storage: Path
+    ) -> None:
+        """Staging without compile must invalidate the cache explicitly so
+        the next render recompiles, regardless of mtime resolution."""
         documents.create("T")
         documents.set_source("t", "= Hello\nText.")
-        old_pdf_mtime = (isolated_storage / "documents" / "t" / "output.pdf").stat().st_mtime
+        pdf_path = isolated_storage / "documents" / "t" / "output.pdf"
+        assert pdf_path.exists()
         result = documents.patch_source("t", "Hello", "Stage Without Compile", validate=False)
         assert result.applied is True
         assert result.compiled is False
-        # Source updated; PDF NOT updated (still old mtime)
+        # Source updated; cached PDF deleted so the next render recompiles.
         assert (
             "Stage Without Compile"
             in (isolated_storage / "documents" / "t" / "source.typ").read_text()
         )
-        new_pdf_mtime = (isolated_storage / "documents" / "t" / "output.pdf").stat().st_mtime
-        assert new_pdf_mtime == old_pdf_mtime  # not rewritten
+        assert not pdf_path.exists()
+        # Render after staging recompiles cleanly and rewrites output.pdf.
+        documents.render_pdf("t")
+        assert pdf_path.exists()
+        assert pdf_path.stat().st_size > 0
 
 
 # ---------------------------------------------------------------------------
@@ -323,6 +331,48 @@ class TestValidation:
     def test_get_unknown_document_raises(self, isolated_storage: Path) -> None:
         with pytest.raises(FileNotFoundError):
             documents.get("nonexistent")
+
+
+class TestStatelessness:
+    """Lock in the contract that documents.py holds NO module-level
+    mutable state. The original bug was a singleton ``Workspace`` with a
+    document_id cursor; if anyone reintroduces a per-process cache or
+    cursor as an "optimization", this test fires.
+    """
+
+    def test_no_module_level_mutable_state(self) -> None:
+        # Allowed module-level names: callables, classes, modules, the
+        # ``__future__.annotations`` sentinel, immutable constants (str,
+        # int, frozenset, tuple, compiled regex), and dunder attributes.
+        # Anything else suggests mutable per-process state has snuck back in.
+        import __future__
+
+        import inspect
+        import re as re_mod
+        from types import ModuleType
+
+        allowed_immutable = (str, int, float, bool, tuple, frozenset, type(None))
+
+        for name, value in vars(documents).items():
+            if name.startswith("__"):
+                continue
+            if (
+                callable(value)
+                or inspect.isclass(value)
+                or isinstance(value, ModuleType)
+                or isinstance(value, __future__._Feature)
+            ):
+                continue
+            if isinstance(value, allowed_immutable):
+                continue
+            if isinstance(value, re_mod.Pattern):
+                continue
+            raise AssertionError(
+                f"documents.{name} is a mutable module-level object "
+                f"({type(value).__name__}). The whole point of this module "
+                "is statelessness — store mutable state on disk, not in "
+                "the module namespace."
+            )
 
 
 class TestDocumentIdValidation:

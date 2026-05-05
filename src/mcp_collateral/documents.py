@@ -59,9 +59,15 @@ Start typing or ask the agent to build your document.
 
 
 def create(name: str, template_id: str | None = None) -> DocumentState:
-    """Create a new document on disk. Returns its state."""
-    document_id = _unique_slug(name)
+    """Create a new document on disk. Returns its state.
+
+    The slug-collision check uses ``mkdir(exist_ok=False)`` to atomically
+    claim the document directory, retrying with a numeric suffix on
+    race. Two concurrent creates with the same name therefore can't both
+    pick the same slug — one wins the directory, the other increments.
+    """
     source = template_mod.get_source(template_id) if template_id else BLANK_SOURCE
+    document_id = _claim_unique_slug(name)
     meta = store.save_document(
         document_id=document_id,
         name=name,
@@ -324,8 +330,11 @@ def _try_apply(
     """Persist new source. Compile when validate=True; on compile failure,
     leave disk untouched and return a structured error."""
     if not validate:
-        # Stage the source without compiling. output.pdf will look stale to
-        # the mtime-based cache, which will trigger a recompile on next render.
+        # Stage the source without compiling. Explicitly delete the cached
+        # output.pdf so the next render recompiles instead of relying on
+        # mtime ordering — second-resolution filesystems can tie source
+        # and pdf mtimes when both writes happen in the same wall-clock
+        # second, which would mask a stale cache.
         store.save_document(
             document_id=meta.id,
             name=meta.name,
@@ -333,6 +342,9 @@ def _try_apply(
             template_id=meta.template_id,
             created=meta.created,
         )
+        pdf_path = store._doc_dir(meta.id) / "output.pdf"
+        if pdf_path.exists():
+            pdf_path.unlink()
         return PatchSourceResult(
             applied=True,
             compiled=False,
@@ -441,12 +453,22 @@ def _slugify(name: str) -> str:
     return slug.strip("-")[:64]
 
 
-def _unique_slug(name: str) -> str:
-    """Generate a slug that doesn't collide with existing documents."""
+def _claim_unique_slug(name: str) -> str:
+    """Atomically reserve a slug by creating its directory.
+
+    ``mkdir(exist_ok=False)`` is the atomic primitive — only one caller
+    can succeed for a given path, so concurrent creates with the same
+    name don't collide. On collision we increment a suffix and retry.
+    Bounded to keep a pathological loop visible.
+    """
+    store.DOCUMENTS_DIR.mkdir(parents=True, exist_ok=True)
     base = _slugify(name)
     slug = base
-    counter = 1
-    while (store.DOCUMENTS_DIR / slug).exists():
-        counter += 1
-        slug = f"{base}-{counter}"
-    return slug
+    for counter in range(2, 1000):
+        try:
+            (store.DOCUMENTS_DIR / slug).mkdir(exist_ok=False)
+            return slug
+        except FileExistsError:
+            slug = f"{base}-{counter}"
+    msg = f"Could not allocate a unique document_id for {name!r}"
+    raise RuntimeError(msg)
