@@ -1,7 +1,8 @@
 {
   "manifest_version": "0.4",
   "name": "@nimblebraininc/synapse-collateral",
-  "version": "0.6.2",
+  "display_name": "Synapse Collateral",
+  "version": "0.6.3",
   "description": "Collateral Studio — Typst-powered document generation with brand-aware templates, live preview, and conversational iteration",
   "author": {
     "name": "NimbleBrain Inc",
