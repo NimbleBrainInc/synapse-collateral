@@ -106,6 +106,26 @@ class TestPatchSourceSuccess:
         # All three distinct → no two consecutive results are byte-identical.
         assert len(set(shas)) == 3
 
+    def test_source_sha_reaches_fastmcp_content_text(self, workspace: Workspace) -> None:
+        """The supervisor fingerprints the result's *content text*, not the
+        Python object. This bug only stays fixed if source_sha survives
+        FastMCP's serialization into that text block. Prove it at the
+        serialization boundary using FastMCP's own serializer — the same
+        function FastMCP uses to build the TextContent for a structured
+        return — so a future refactor that returns a hand-built result with
+        constant content (reintroducing the bug) fails here.
+        """
+        from fastmcp.tools.tool import default_serializer
+
+        workspace.create_document("Test")
+        workspace.set_source("= A\n= B\n")
+        r1 = workspace.patch_source("= A", "= A1")
+        r2 = workspace.patch_source("= B", "= B1")
+        t1, t2 = default_serializer(r1), default_serializer(r2)
+        assert "source_sha" in t1
+        # The serialized content text — what the host hashes — differs per edit.
+        assert t1 != t2
+
     def test_source_sha_is_stable_on_no_op_edit(self, workspace: Workspace) -> None:
         """A no-op edit (find == replace) leaves source_sha unchanged.
 
