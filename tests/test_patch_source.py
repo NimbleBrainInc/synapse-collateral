@@ -85,6 +85,62 @@ class TestPatchSourceSuccess:
         # The returned workspace reflects the same document we just edited
         assert result.workspace.document_name == "Test"
 
+    def test_successive_edits_emit_distinct_source_sha(self, workspace: Workspace) -> None:
+        """Each successful edit must change workspace.source_sha.
+
+        Regression for the loop-supervisor trip: the host fingerprints tool
+        results and disables a tool that returns the *same* result 3x in a
+        row. Before source_sha, every applied edit returned a byte-identical
+        success envelope (applied/compiled + an unchanged workspace snapshot),
+        so a normal batch-patch workflow tripped the supervisor and lost
+        write access mid-document. The per-edit source_sha makes consecutive
+        successful edits distinct.
+        """
+        workspace.create_document("Test")
+        workspace.set_source("= A\n= B\n= C\n")
+        r1 = workspace.patch_source("= A", "= A1")
+        r2 = workspace.patch_source("= B", "= B1")
+        r3 = workspace.patch_source("= C", "= C1")
+        shas = [r.workspace.source_sha for r in (r1, r2, r3)]
+        assert all(s is not None for s in shas)
+        # All three distinct → no two consecutive results are byte-identical.
+        assert len(set(shas)) == 3
+
+    def test_source_sha_reaches_fastmcp_content_text(self, workspace: Workspace) -> None:
+        """The supervisor fingerprints the result's *content text*, not the
+        Python object. This bug only stays fixed if source_sha survives
+        FastMCP's serialization into that text block. Prove it at the
+        serialization boundary using FastMCP's own serializer — the same
+        function FastMCP uses to build the TextContent for a structured
+        return — so a future refactor that returns a hand-built result with
+        constant content (reintroducing the bug) fails here.
+        """
+        from fastmcp.tools.tool import default_serializer
+
+        workspace.create_document("Test")
+        workspace.set_source("= A\n= B\n")
+        r1 = workspace.patch_source("= A", "= A1")
+        r2 = workspace.patch_source("= B", "= B1")
+        t1, t2 = default_serializer(r1), default_serializer(r2)
+        assert "source_sha" in t1
+        # The serialized content text — what the host hashes — differs per edit.
+        assert t1 != t2
+
+    def test_source_sha_is_stable_on_no_op_edit(self, workspace: Workspace) -> None:
+        """A no-op edit (find == replace) leaves source_sha unchanged.
+
+        source_sha is a content hash, not a monotonic counter: a genuine
+        no-op produces the identical fingerprint, preserving the supervisor's
+        ability to catch a tool stuck re-applying the same edit. A counter
+        would mask that loop.
+        """
+        workspace.create_document("Test")
+        workspace.set_source("= Heading\nbody\n")
+        before = workspace.get_state().source_sha
+        result = workspace.patch_source("= Heading", "= Heading")  # no-op
+        assert result.applied is True
+        assert result.workspace.source_sha == before
+
     def test_batch_edits_apply_sequentially(self, workspace: Workspace) -> None:
         """Edit N can find text that edit N-1 created — the docstring promises this."""
         workspace.create_document("Test")

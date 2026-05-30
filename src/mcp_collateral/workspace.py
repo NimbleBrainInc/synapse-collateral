@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import difflib
+import hashlib
 import io
 import re
 import secrets
@@ -126,6 +127,7 @@ class Workspace:
             document_name=self.document_name,
             template_id=self.template_id,
             theme=theme,
+            source_sha=hashlib.sha256(self.source.encode("utf-8")).hexdigest(),
         )
 
     def get_source(self) -> str:
