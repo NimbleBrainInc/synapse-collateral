@@ -82,12 +82,12 @@ class DocumentState(BaseModel):
     theme: ThemeData = Field(default_factory=ThemeData)
     # sha256 of the current Typst source. A per-call fingerprint of document
     # state: it changes whenever the source changes and is identical on a
-    # genuine no-op. Every mutating tool that returns WorkspaceState
+    # genuine no-op. Every mutating tool that returns DocumentState
     # (patch_source, set_source, set_theme) thus emits a distinct success
     # envelope per successful edit, so the host's loop supervisor — which
     # fingerprints tool results to catch stuck loops — does not mistake a
-    # batch of successive edits for the same result repeated. See
-    # workspace.py::Workspace.get_state.
+    # batch of successive edits for the same result repeated. Populated in
+    # documents.py::_build_state.
     source_sha: str | None = None
 
 

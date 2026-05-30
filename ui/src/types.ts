@@ -43,6 +43,7 @@ export interface DocumentState {
   document_name: string | null;
   template_id: string | null;
   theme?: ThemeData;
+  source_sha: string | null;
 }
 
 export interface SourceResponse {

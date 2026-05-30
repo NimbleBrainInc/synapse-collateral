@@ -209,6 +209,70 @@ class TestPatch:
 
 
 # ---------------------------------------------------------------------------
+# source_sha — per-edit fingerprint that keeps the host loop supervisor
+# from disabling the edit tool after 3 successive identical envelopes
+# ---------------------------------------------------------------------------
+
+
+class TestSourceSha:
+    def test_successive_edits_emit_distinct_source_sha(self, isolated_storage: Path) -> None:
+        """Each successful edit must change the returned source_sha.
+
+        Regression for the loop-supervisor trip: the host fingerprints tool
+        results and disables a tool that returns the *same* result 3x in a
+        row. Without source_sha, every applied edit returned a byte-identical
+        success envelope (applied/compiled + an unchanged document snapshot),
+        so a normal batch-patch workflow tripped the supervisor and lost
+        write access mid-document. The per-edit source_sha makes consecutive
+        successful edits distinct.
+        """
+        documents.create("Test")
+        documents.set_source("test", "= A\n= B\n= C\n")
+        r1 = documents.patch_source("test", "= A", "= A1")
+        r2 = documents.patch_source("test", "= B", "= B1")
+        r3 = documents.patch_source("test", "= C", "= C1")
+        shas = [r.document.source_sha for r in (r1, r2, r3)]
+        assert all(s is not None for s in shas)
+        # All three distinct → no two consecutive results are byte-identical.
+        assert len(set(shas)) == 3
+
+    def test_source_sha_reaches_fastmcp_content_text(self, isolated_storage: Path) -> None:
+        """The supervisor fingerprints the result's *content text*, not the
+        Python object. This bug only stays fixed if source_sha survives
+        FastMCP's serialization into that text block. Prove it at the
+        serialization boundary using FastMCP's own serializer — the same
+        function FastMCP uses to build the TextContent for a structured
+        return — so a future refactor that returns a hand-built result with
+        constant content (reintroducing the bug) fails here.
+        """
+        from fastmcp.tools.tool import default_serializer
+
+        documents.create("Test")
+        documents.set_source("test", "= A\n= B\n")
+        r1 = documents.patch_source("test", "= A", "= A1")
+        r2 = documents.patch_source("test", "= B", "= B1")
+        t1, t2 = default_serializer(r1), default_serializer(r2)
+        assert "source_sha" in t1
+        # The serialized content text — what the host hashes — differs per edit.
+        assert t1 != t2
+
+    def test_source_sha_is_stable_on_no_op_edit(self, isolated_storage: Path) -> None:
+        """A no-op edit (find == replace) leaves source_sha unchanged.
+
+        source_sha is a content hash, not a monotonic counter: a genuine
+        no-op produces the identical fingerprint, preserving the supervisor's
+        ability to catch a tool stuck re-applying the same edit. A counter
+        would mask that loop.
+        """
+        documents.create("Test")
+        before = documents.set_source("test", "= Heading\nbody\n").source_sha
+        result = documents.patch_source("test", "= Heading", "= Heading")  # no-op
+        assert result.applied is True
+        assert result.document is not None
+        assert result.document.source_sha == before
+
+
+# ---------------------------------------------------------------------------
 # Isolation — the load-bearing test for the bug we're fixing
 # ---------------------------------------------------------------------------
 

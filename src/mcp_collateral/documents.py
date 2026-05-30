@@ -21,6 +21,7 @@ otherwise compiles fresh and rewrites both. There is no in-memory cache.
 from __future__ import annotations
 
 import difflib
+import hashlib
 import re
 
 from . import compiler, store
@@ -266,7 +267,11 @@ def display_name(document_id: str) -> str:
 
 
 def _build_state(meta: DocumentMeta, source: str) -> DocumentState:
-    """Materialize a DocumentState from an already-loaded meta + source."""
+    """Materialize a DocumentState from an already-loaded meta + source.
+
+    ``source_sha`` fingerprints the current source so that successive
+    successful edits return distinct envelopes — see DocumentState.source_sha.
+    """
     parsed = theme_mod.parse_theme(source)
     return DocumentState(
         document_id=meta.id,
@@ -277,6 +282,7 @@ def _build_state(meta: DocumentMeta, source: str) -> DocumentState:
             fonts=parsed.get("fonts", {}),
             spacing=parsed.get("spacing", {}),
         ),
+        source_sha=hashlib.sha256(source.encode("utf-8")).hexdigest(),
     )
 
 
