@@ -8,6 +8,10 @@ interface PreviewPaneProps {
   error: string;
   hasSelection: boolean;
   emptyHint: string;
+  // Document id to export when the user clicks download. Omitted for the
+  // template preview (templates have no export_pdf target), which hides the
+  // download button.
+  exportDocumentId?: string | null;
 }
 
 /**
@@ -40,13 +44,17 @@ export function PreviewPane({
   error,
   hasSelection,
   emptyHint,
+  exportDocumentId,
 }: PreviewPaneProps) {
   const { exportPdf } = useExport();
+  const onDownload = exportDocumentId
+    ? () => exportPdf(exportDocumentId)
+    : undefined;
 
   return (
     <div className="collateral-preview-pane" style={s.rightPanel}>
       {blob ? (
-        <PDFViewer blob={blob} onDownload={exportPdf} />
+        <PDFViewer blob={blob} onDownload={onDownload} />
       ) : (
         <div style={s.previewStatus}>
           {error ? (
