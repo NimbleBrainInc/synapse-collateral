@@ -2,18 +2,9 @@
 // Run: uv run python scripts/gen-types.py > ui/src/types.ts
 
 export interface ThemeData {
-  colors?: dict[str, str];
-  fonts?: dict[str, str];
-  spacing?: dict[str, str];
-}
-
-export interface VariableDefinition {
-  name: string;
-  type: string;
-  description?: string;
-  default?: unknown;
-  required?: boolean;
-  group?: string;
+  colors?: Record<string, string>;
+  fonts?: Record<string, string>;
+  spacing?: Record<string, string>;
 }
 
 export interface TemplateInfo {
@@ -21,7 +12,6 @@ export interface TemplateInfo {
   name: string;
   description?: string;
   page_count?: number;
-  variables?: VariableDefinition[];
   created?: string;
   modified?: string;
 }
@@ -48,69 +38,65 @@ export interface DocumentMeta {
   modified?: string;
 }
 
-export interface SectionState {
-  name: string;
-  type: string;
-  group: string;
-  value: unknown;
-  required?: boolean;
-  description?: string;
-}
-
-export interface WorkspaceState {
+export interface DocumentState {
   document_id: string | null;
   document_name: string | null;
   template_id: string | null;
   theme?: ThemeData;
-  source_sha?: string | null;
-  source?: string;
-  sections?: SectionState[];
-  has_cache?: boolean;
+  source_sha: string | null;
 }
 
-export interface PagePreview {
-  page_number: number;
-  image_base64: string | null;
+export interface SourceResponse {
+  document_id: string;
+  source: string;
 }
 
-export interface PreviewResult {
-  pages?: PagePreview[];
-  page_count?: number;
-  message?: string;
+export interface NearestMatch {
+  line: number;
+  similarity: number;
+  context: string;
 }
 
-export interface ExportResult {
-  pdf_base64: string | null;
-  filename?: string;
-  page_count?: number;
-  size_bytes?: number;
-  message?: string;
+export interface PatchSourceResult {
+  applied: boolean;
+  compiled: boolean;
+  reason: "text_not_found" | "compile_error" | null;
+  query: string | null;
+  nearest_match: NearestMatch | null;
+  suggestion: string | null;
+  compile_error: string | null;
+  failed_edit_index: number | null;
+  document: DocumentState | null;
 }
 
 // --- Tool Return Type Reference ---
 // list_templates() → TemplateInfo[]
-// create_template() → TemplateInfo
-// duplicate_template() → TemplateInfo
-// save_as_template() → TemplateInfo
-// create_document() → WorkspaceState
+// get_template(template_id) → { info, source, theme }
+// create_template(template_id, name, description, source, schema?) → TemplateInfo
+// duplicate_template(template_id, new_id, new_name) → TemplateInfo
+// delete_template(template_id) → string
+// save_as_template(document_id, name, description?) → TemplateInfo
+// create_document(name, template_id?) → DocumentState
 // list_documents() → DocumentInfo[]
-// open_document() → WorkspaceState
-// save_document() → DocumentInfo
-// get_workspace() → WorkspaceState
-// set_content() → WorkspaceState
-// set_source() → WorkspaceState
-// get_theme() → { colors: Record<string,string>, fonts: Record<string,string>, spacing: Record<string,string> }
-// set_theme() → WorkspaceState
-// get_template() → { info: TemplateInfo, source: string, theme: ThemeData }
+// save_document(document_id, name?) → DocumentInfo
+// delete_document(document_id) → string
+// get_workspace(document_id) → DocumentState
+// get_source(document_id) → SourceResponse
+// set_source(document_id, source) → DocumentState
+// patch_source(document_id, find?, replace?, edits?, validate?) → PatchSourceResult
+// get_theme(document_id) → { colors, fonts, spacing }
+// set_theme(document_id, updates) → DocumentState
+// import_content(base64_data, filename) → string
 // get_voice() → string
-// set_voice() → { status: string; path: string }
-// list_assets() → string[]
-// upload_asset() → { filename: string; path: string }
-// delete_asset() → { status: string; filename: string }
+// set_voice(content) → { status, path }
 // get_components() → string
-// set_components() → { status: string; path: string }
+// set_components(source) → { status, path }
+// list_assets() → string[]
+// upload_asset(base64_data, filename) → { filename, path }
+// delete_asset(filename) → { status, filename }
 // list_fonts() → string[]
-// install_font() → { installed: string[]; count: number; fonts_dir: string }
-// preview() → PreviewResult
-// export_pdf() → ExportResult
-// compile_typst() → ExportResult
+// install_font(url?, base64_data?, filename?) → { installed, count, fonts_dir }
+// preview(document_id, page?) → ToolResult (resource_link to PDF)
+// preview_template(template_id) → ToolResult
+// export_pdf(document_id) → ToolResult
+// compile_typst(source) → ToolResult

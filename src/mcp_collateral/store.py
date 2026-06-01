@@ -44,6 +44,11 @@ DOCUMENTS_DIR = BASE_DIR / "documents"
 COMPILE_DIR = BASE_DIR / "_compile"
 
 _SAFE_FILENAME_RE = re.compile(r"^[a-zA-Z0-9._-]+$")
+# document_id is a slug produced by _slugify; allow lowercase, digits, hyphen.
+# Reject path separators, dots, leading/trailing hyphens, anything that could
+# escape DOCUMENTS_DIR. Tighter than _SAFE_FILENAME_RE because document_ids
+# are URL-shaped slugs, not arbitrary filenames.
+_SAFE_DOCUMENT_ID_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -80,7 +85,23 @@ def _validate_filename(filename: str) -> None:
         raise ValueError(msg)
 
 
+def _validate_document_id(document_id: str) -> None:
+    """Reject document_ids with path separators, dots, or unsafe characters.
+
+    Defense in depth: every doc tool in the MCP server now takes
+    document_id straight from the LLM/UI, so the store must reject
+    anything that isn't a slug regardless of caller hygiene.
+    """
+    if not isinstance(document_id, str) or not _SAFE_DOCUMENT_ID_RE.match(document_id):
+        msg = (
+            f"Invalid document_id: {document_id!r} — must be a slug "
+            "(lowercase letters, digits, hyphens; cannot start/end with hyphen)."
+        )
+        raise ValueError(msg)
+
+
 def _doc_dir(document_id: str) -> Path:
+    _validate_document_id(document_id)
     _ensure_dirs()
     return DOCUMENTS_DIR / document_id
 
@@ -368,6 +389,33 @@ def save_document(
     (doc_dir / "meta.json").write_text(json.dumps(meta.model_dump(), indent=2))
     (doc_dir / "source.typ").write_text(source)
 
+    return meta
+
+
+def rename_document(document_id: str, name: str) -> DocumentMeta:
+    """Rename a document, touching only meta.json.
+
+    Deliberately does NOT rewrite source.typ: a rename leaves content
+    unchanged, and rewriting source.typ would bump its mtime past
+    output.pdf and force a needless recompile on the next preview (the
+    PDF cache keys off source.typ mtime). Returns the updated metadata.
+    """
+    doc_dir = _doc_dir(document_id)
+    if not doc_dir.exists():
+        msg = f"Document not found: {document_id}"
+        raise FileNotFoundError(msg)
+
+    with open(doc_dir / "meta.json") as f:
+        existing = DocumentMeta(**json.load(f))
+
+    meta = DocumentMeta(
+        id=existing.id,
+        name=name,
+        template_id=existing.template_id,
+        created=existing.created,
+        modified=_now(),
+    )
+    (doc_dir / "meta.json").write_text(json.dumps(meta.model_dump(), indent=2))
     return meta
 
 

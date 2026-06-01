@@ -1,6 +1,26 @@
 # Collateral Studio
 
-30 tools. Documents are the primary entity. Theme lives in the source.
+Documents are the primary entity. Theme lives in the source.
+
+## Cardinal Rule — Explicit `document_id`
+
+Every read/write tool takes `document_id` as its first argument. There
+is **no implicit cursor**. The agent must thread the id through every
+call.
+
+```python
+state = create_document(name="Acme Proposal")          # → returns document_id
+patch_source(document_id=state.document_id, find=..., replace=...)
+preview(document_id=state.document_id)
+```
+
+To work on an existing document, get its id from `list_documents()` and
+use it directly. There is no "open" step; nothing to set up.
+
+If you have multiple documents in flight, each call must name the doc
+it operates on. The server has no concept of "the currently open
+document" — that abstraction was the source of cross-document
+overwrites and is gone.
 
 ## Theme Discipline
 
@@ -30,17 +50,12 @@ Every `.typ` file has a `// === THEME ===` block that defines all design tokens:
 
 ### Changing the theme
 
-- `get_theme()` — parse the theme block, returns `{colors, fonts, spacing}`
-- `set_theme(updates)` — merge changes into the theme block, auto-compiles, auto-saves
+- `get_theme(document_id)` — parse the theme block, returns `{colors, fonts, spacing}`
+- `set_theme(document_id, updates)` — merge changes into the theme block, auto-compiles, auto-saves
 
-Example: user says "make it more blue"
+Example: user says "make it more blue" on doc `acme-proposal`
 ```
-set_theme({"primary": "#0055FF", "accent": "#3B82F6"})
-```
-
-Example: user says "use Inter for headings"
-```
-set_theme({"font-display": "Inter"})
+set_theme(document_id="acme-proposal", updates={"primary": "#0055FF", "accent": "#3B82F6"})
 ```
 
 Always check `list_fonts()` before setting a font. Install missing fonts via `install_font`.
@@ -49,12 +64,12 @@ Always check `list_fonts()` before setting a font. Install missing fonts via `in
 
 ### The two editing modes
 
-1. **`set_source(source)`** — Write the ENTIRE document. Use ONLY for:
+1. **`set_source(document_id, source)`** — Write the ENTIRE document. Use ONLY for:
    - Initial document creation from a template
    - Writing a brand-new document from imported content
    - **Never for revisions.** If the document already exists, use `patch_source`.
 
-2. **`patch_source(...)`** — Surgical find-and-replace. Use for ALL changes after creation:
+2. **`patch_source(document_id, ...)`** — Surgical find-and-replace. Use for ALL changes after creation:
    - Fixing spacing, margins, gaps
    - Changing text, headlines, section content
    - Adding/removing page breaks
@@ -67,7 +82,7 @@ Always check `list_fonts()` before setting a font. Install missing fonts via `in
 When you need to fix multiple things, use batch mode — one call, one compilation:
 
 ```
-patch_source(edits=[
+patch_source(document_id="acme-proposal", edits=[
     {"find": "#v(section-gap)", "replace": "#v(12pt)"},
     {"find": "== Old Title", "replace": "== New Title"},
     {"find": "// end intro", "replace": "#pagebreak()\n// end intro"}
@@ -87,14 +102,14 @@ Right: `find="text#linebreak()\n        more text"` (preserves the actual whites
 
 **Best practice:** Use shorter find strings that stay on a single line. Instead of matching a full multi-line paragraph, match just the unique phrase on one line.
 
-If unsure about exact whitespace, call `get_source()` first and copy the text exactly.
+If unsure about exact whitespace, call `get_source(document_id)` first and copy the text exactly.
 
 ### Single edit
 
 For a single change, use the simple form:
 
 ```
-patch_source(find="#v(78pt)", replace="#v(24pt)")
+patch_source(document_id="acme-proposal", find="#v(78pt)", replace="#v(24pt)")
 ```
 
 ### Reading the response
@@ -110,7 +125,7 @@ patch_source(find="#v(78pt)", replace="#v(24pt)")
 | `suggestion` | Human-readable next step. |
 | `failed_edit_index` | Which entry in a batch failed. |
 | `compile_error` | The Typst error when the edit compiled poorly. |
-| `workspace` | Current `WorkspaceState` when `applied=True`. |
+| `document` | Current `DocumentState` when `applied=True`. |
 
 **Recovery rules:**
 
@@ -123,9 +138,9 @@ patch_source(find="#v(78pt)", replace="#v(24pt)")
 If you need to make several edits where the intermediate state may not compile, pass `validate=False` to skip auto-compile:
 
 ```
-patch_source(edits=[...], validate=False)    # stage
-patch_source(edits=[...], validate=False)    # stage more
-preview()                                    # now compile
+patch_source(document_id="acme-proposal", edits=[...], validate=False)    # stage
+patch_source(document_id="acme-proposal", edits=[...], validate=False)    # stage more
+preview(document_id="acme-proposal")                                      # now compile
 ```
 
 The default is `validate=True` — use it unless you specifically need to stage.
@@ -134,19 +149,19 @@ The default is `validate=True` — use it unless you specifically need to stage.
 
 | Change scope | Tool | Why |
 |---|---|---|
-| Multiple targeted fixes | `patch_source(edits=[...])` | One call, one compile, surgical |
-| Single text replacement | `patch_source(find, replace)` | Minimal tokens |
-| Theme colors/fonts/spacing | `set_theme(updates)` | Updates theme block only |
-| Initial document content | `set_source(source)` | Full document, one-time only |
-| Read the source | `get_source()` | Returns full Typst source |
-| Read metadata + theme | `get_workspace()` | Lightweight, no source |
+| Multiple targeted fixes | `patch_source(document_id, edits=[...])` | One call, one compile, surgical |
+| Single text replacement | `patch_source(document_id, find, replace)` | Minimal tokens |
+| Theme colors/fonts/spacing | `set_theme(document_id, updates)` | Updates theme block only |
+| Initial document content | `set_source(document_id, source)` | Full document, one-time only |
+| Read the source | `get_source(document_id)` | Returns `{document_id, source}` |
+| Read metadata + theme | `get_workspace(document_id)` | Lightweight, no source |
 
 **`set_source` and `patch_source` compile automatically.** If the tool succeeds, the edit is valid. Only call `preview()` when the user asks to see the document.
 
 ## Content Import
 
 - `import_content(base64_data, filename)` — extracts text from uploaded files (PDF, TXT, MD, TYP)
-- The agent receives the extracted text and incorporates it into the document via `set_source`
+- The agent receives the extracted text and incorporates it into the document via `set_source(document_id, ...)`
 - When creating a document from imported content, choose a template that matches the content structure, then rewrite the content sections while preserving the template's layout and theme
 
 For detailed tool selection, error recovery, and anti-patterns, read the `skill://collateral/reference` resource.

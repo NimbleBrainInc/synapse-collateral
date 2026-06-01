@@ -65,11 +65,16 @@ class DocumentInfo(BaseModel):
     modified: str = ""
 
 
-# --- Workspace ---
+# --- Document state ---
 
 
-class WorkspaceState(BaseModel):
-    """The single introspection response — everything the agent needs."""
+class DocumentState(BaseModel):
+    """Lightweight document metadata — no source, no PDF.
+
+    Returned by every tool that creates or mutates a document. Contains the
+    fields the agent and UI need to identify and label a document without
+    transferring the full Typst source.
+    """
 
     document_id: str | None = None
     document_name: str | None = None
@@ -77,13 +82,25 @@ class WorkspaceState(BaseModel):
     theme: ThemeData = Field(default_factory=ThemeData)
     # sha256 of the current Typst source. A per-call fingerprint of document
     # state: it changes whenever the source changes and is identical on a
-    # genuine no-op. Every mutating tool that returns WorkspaceState
+    # genuine no-op. Every mutating tool that returns DocumentState
     # (patch_source, set_source, set_theme) thus emits a distinct success
     # envelope per successful edit, so the host's loop supervisor — which
     # fingerprints tool results to catch stuck loops — does not mistake a
-    # batch of successive edits for the same result repeated. See
-    # workspace.py::Workspace.get_state.
+    # batch of successive edits for the same result repeated. Populated in
+    # documents.py::_build_state.
     source_sha: str | None = None
+
+
+class SourceResponse(BaseModel):
+    """Response shape for get_source.
+
+    Returns an object (not a bare string) so additional fields — most
+    notably a future ``revision`` for optimistic-concurrency writes — can
+    be added without breaking the wire contract.
+    """
+
+    document_id: str
+    source: str
 
 
 # --- Editing (patch_source) ---
@@ -118,4 +135,4 @@ class PatchSourceResult(BaseModel):
     suggestion: str | None = None
     compile_error: str | None = None
     failed_edit_index: int | None = None
-    workspace: WorkspaceState | None = None
+    document: DocumentState | None = None

@@ -26,11 +26,11 @@
   "tools": [
     {
       "name": "get_theme",
-      "description": "Get the current document's theme (colors, fonts, spacing)"
+      "description": "Get a document's theme (by document_id): colors, fonts, spacing"
     },
     {
       "name": "set_theme",
-      "description": "Update theme tokens in the current document"
+      "description": "Update theme tokens in a document (by document_id)"
     },
     {
       "name": "list_templates",
@@ -54,35 +54,31 @@
     },
     {
       "name": "create_document",
-      "description": "Create a new document and set it as the active workspace"
+      "description": "Create a new document; returns its document_id"
     },
     {
       "name": "list_documents",
       "description": "List saved documents with metadata"
     },
     {
-      "name": "open_document",
-      "description": "Load a saved document into the workspace"
-    },
-    {
       "name": "save_document",
-      "description": "Persist the current workspace to the filesystem"
+      "description": "Persist a document (by document_id) to the filesystem"
     },
     {
       "name": "save_as_template",
-      "description": "Promote the current document's source into a new reusable template"
+      "description": "Promote a document's source (by document_id) into a new reusable template"
     },
     {
       "name": "delete_document",
-      "description": "Delete a document from disk"
+      "description": "Delete a document (by document_id) from disk"
     },
     {
       "name": "get_workspace",
-      "description": "Get workspace metadata: document name, template, and theme"
+      "description": "Get a document's metadata (by document_id): name, template, and theme"
     },
     {
       "name": "get_source",
-      "description": "Get the current document's full Typst source code"
+      "description": "Get a document's full Typst source code (by document_id)"
     },
     {
       "name": "patch_source",
@@ -110,7 +106,7 @@
     },
     {
       "name": "get_voice",
-      "description": "Get the current brand voice document"
+      "description": "Get the workspace brand voice document"
     },
     {
       "name": "set_voice",
@@ -118,7 +114,7 @@
     },
     {
       "name": "get_components",
-      "description": "Get the current reusable Typst components"
+      "description": "Get the workspace reusable Typst components"
     },
     {
       "name": "set_components",
@@ -134,7 +130,7 @@
     },
     {
       "name": "preview",
-      "description": "Render the current document to PNG preview images"
+      "description": "Render a document (by document_id) to PNG preview images"
     },
     {
       "name": "preview_template",
@@ -142,7 +138,7 @@
     },
     {
       "name": "export_pdf",
-      "description": "Export the current document as a final PDF"
+      "description": "Export a document (by document_id) as a final PDF"
     },
     {
       "name": "compile_typst",
