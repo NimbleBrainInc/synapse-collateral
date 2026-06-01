@@ -22,7 +22,6 @@ it operates on. The server has no concept of "the currently open
 document" — that abstraction was the source of cross-document
 overwrites and is gone.
 
->>>>>>> af47304 (docs(skill): rewrite agent guidance for explicit-id discipline)
 ## Theme Discipline
 
 Every `.typ` file has a `// === THEME ===` block that defines all design tokens:

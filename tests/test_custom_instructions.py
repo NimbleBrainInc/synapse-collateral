@@ -3,6 +3,9 @@
 Mirrors the synapse-todo-board pattern. Voice ↔ custom-instructions are the
 same body for collateral; these tests exercise the round-trip from voice.md
 on disk → `app://instructions` resource → set_voice tool path.
+
+Voice is workspace-scoped (not document-scoped), so it lives on the stateless
+module-level functions in ``workspace.py`` — there is no Workspace class.
 """
 
 from __future__ import annotations
@@ -42,18 +45,16 @@ class TestAppInstructionsResource:
     """The platform reads `app://instructions` on every prompt assembly."""
 
     def test_returns_empty_string_when_unset(self, collateral_root: Path) -> None:
-        from mcp_collateral.workspace import Workspace
+        from mcp_collateral import workspace
 
-        ws = Workspace()
-        assert ws.get_voice() == ""
+        assert workspace.get_voice() == ""
         assert not _voice_path(collateral_root).exists()
 
     def test_returns_saved_body(self, collateral_root: Path) -> None:
-        from mcp_collateral.workspace import Workspace
+        from mcp_collateral import workspace
 
-        ws = Workspace()
-        ws.set_voice("# Voice\n\nWrite plainly.")
-        assert ws.get_voice() == "# Voice\n\nWrite plainly."
+        workspace.set_voice("# Voice\n\nWrite plainly.")
+        assert workspace.get_voice() == "# Voice\n\nWrite plainly."
         assert _voice_path(collateral_root).read_text() == "# Voice\n\nWrite plainly."
 
 
@@ -61,39 +62,35 @@ class TestSetVoiceContract:
     """set_voice mirrors the platform's `app://instructions` write contract."""
 
     def test_save_returns_status_saved(self, collateral_root: Path) -> None:
-        from mcp_collateral.workspace import Workspace
+        from mcp_collateral import workspace
 
-        ws = Workspace()
-        result = ws.set_voice("Some voice")
+        result = workspace.set_voice("Some voice")
         assert result["status"] == "saved"
         assert _voice_path(collateral_root).read_text() == "Some voice"
 
     def test_empty_clears_file(self, collateral_root: Path) -> None:
-        from mcp_collateral.workspace import Workspace
+        from mcp_collateral import workspace
 
-        ws = Workspace()
-        ws.set_voice("first")
+        workspace.set_voice("first")
         assert _voice_path(collateral_root).exists()
 
-        result = ws.set_voice("")
+        result = workspace.set_voice("")
         assert result == {"status": "cleared"}
         assert not _voice_path(collateral_root).exists()
-        assert ws.get_voice() == ""
+        assert workspace.get_voice() == ""
 
     def test_clear_when_already_empty_is_idempotent(self, collateral_root: Path) -> None:
-        from mcp_collateral.workspace import Workspace
+        from mcp_collateral import workspace
 
-        ws = Workspace()
-        result = ws.set_voice("")
+        result = workspace.set_voice("")
         assert result == {"status": "cleared"}
         assert not _voice_path(collateral_root).exists()
 
     def test_overwrites_existing_voice(self, collateral_root: Path) -> None:
-        from mcp_collateral.workspace import Workspace
+        from mcp_collateral import workspace
 
-        ws = Workspace()
-        ws.set_voice("first")
-        ws.set_voice("second")
+        workspace.set_voice("first")
+        workspace.set_voice("second")
         assert _voice_path(collateral_root).read_text() == "second"
 
 
@@ -101,20 +98,20 @@ class TestByteCap:
     """8 KiB UTF-8 cap on the voice body (self-imposed prompt-budget guard)."""
 
     def test_at_cap_succeeds(self, collateral_root: Path) -> None:
-        from mcp_collateral.workspace import MAX_VOICE_BYTES, Workspace
+        from mcp_collateral import workspace
+        from mcp_collateral.workspace import MAX_VOICE_BYTES
 
-        ws = Workspace()
         body = "a" * MAX_VOICE_BYTES  # ASCII → 1 byte per char
-        result = ws.set_voice(body)
+        result = workspace.set_voice(body)
         assert result["status"] == "saved"
 
     def test_one_byte_over_raises(self, collateral_root: Path) -> None:
-        from mcp_collateral.workspace import MAX_VOICE_BYTES, Workspace
+        from mcp_collateral import workspace
+        from mcp_collateral.workspace import MAX_VOICE_BYTES
 
-        ws = Workspace()
         body = "a" * (MAX_VOICE_BYTES + 1)
         with pytest.raises(ValueError, match=str(MAX_VOICE_BYTES)):
-            ws.set_voice(body)
+            workspace.set_voice(body)
         # On rejection, no partial write should land on disk.
         assert not _voice_path(collateral_root).exists()
 
@@ -126,12 +123,11 @@ class TestByteCap:
         Tests that we're enforcing the cap in *bytes*, not character count.
         Otherwise a body with 2049 chars (≪ 8192) would slip through.
         """
-        from mcp_collateral.workspace import Workspace
+        from mcp_collateral import workspace
 
-        ws = Workspace()
         body = "😀" * 2049
         with pytest.raises(ValueError):
-            ws.set_voice(body)
+            workspace.set_voice(body)
 
 
 class TestSkillResourceNoLongerSplices:
@@ -143,11 +139,9 @@ class TestSkillResourceNoLongerSplices:
     """
 
     def test_skill_does_not_contain_voice_body(self, collateral_root: Path) -> None:
-        from mcp_collateral.workspace import Workspace
+        from mcp_collateral import workspace
 
-        ws = Workspace()
-        ws.set_voice("CONFIDENTIAL_VOICE_MARKER")
-        # Re-import to pick up the in-test SKILL_CONTENT
+        workspace.set_voice("CONFIDENTIAL_VOICE_MARKER")
         from mcp_collateral.server import collateral_skill
 
         skill_text = collateral_skill()
