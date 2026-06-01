@@ -23,6 +23,7 @@ from __future__ import annotations
 import difflib
 import hashlib
 import re
+import unicodedata
 
 from . import compiler, store
 from . import templates as template_mod
@@ -69,12 +70,18 @@ def create(name: str, template_id: str | None = None) -> DocumentState:
     """
     source = template_mod.get_source(template_id) if template_id else BLANK_SOURCE
     document_id = _claim_unique_slug(name)
-    meta = store.save_document(
-        document_id=document_id,
-        name=name,
-        source=source,
-        template_id=template_id,
-    )
+    try:
+        meta = store.save_document(
+            document_id=document_id,
+            name=name,
+            source=source,
+            template_id=template_id,
+        )
+    except Exception:
+        # save_document failed after we claimed the directory — release it so
+        # the slug isn't permanently taken and no empty dir is left behind.
+        _release_claimed_slug(document_id)
+        raise
     return _build_state(meta, source)
 
 
@@ -452,11 +459,23 @@ def _nearest_line_match(source: str, query: str) -> NearestMatch | None:
 
 
 def _slugify(name: str) -> str:
-    """Convert a name to a filesystem-safe slug."""
-    slug = name.lower().strip()
-    slug = re.sub(r"[^\w\s-]", "", slug)
+    """Convert a name to a slug the store's document_id validator accepts.
+
+    The validator (`store._validate_document_id`) is intentionally strict —
+    ASCII ``^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$`` — because the id becomes a
+    directory name and is the path-traversal boundary. This producer must
+    therefore only ever emit ASCII-safe slugs, so non-ASCII names ("Café
+    Proposal", "提案書") don't slugify into something the validator rejects.
+
+    NFKD-normalize then drop non-ASCII (café→cafe, résumé→resume), lowercase,
+    keep only ``[a-z0-9 -]``, collapse whitespace/underscores to hyphens. Names
+    that reduce to nothing (CJK-only, all-symbol) fall back to "document".
+    """
+    slug = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
+    slug = slug.lower().strip()
+    slug = re.sub(r"[^a-z0-9\s-]", "", slug)
     slug = re.sub(r"[\s_]+", "-", slug)
-    return slug.strip("-")[:64]
+    return slug.strip("-")[:64] or "document"
 
 
 def _claim_unique_slug(name: str) -> str:
@@ -478,3 +497,13 @@ def _claim_unique_slug(name: str) -> str:
             slug = f"{base}-{counter}"
     msg = f"Could not allocate a unique document_id for {name!r}"
     raise RuntimeError(msg)
+
+
+def _release_claimed_slug(document_id: str) -> None:
+    """Remove a slug directory claimed by ``_claim_unique_slug`` when the
+    subsequent populate step fails. Only removes an *empty* directory, so a
+    partially-written document is never silently discarded."""
+    try:
+        (store.DOCUMENTS_DIR / document_id).rmdir()
+    except OSError:
+        pass

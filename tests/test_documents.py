@@ -93,6 +93,49 @@ class TestLifecycle:
 
 
 # ---------------------------------------------------------------------------
+# Slug producer ↔ id validator agreement
+#
+# The slug producer (_slugify) and the store's strict ASCII id validator are
+# both new in this PR and must agree: any name the producer accepts must
+# validate. Non-ASCII names ("Café Proposal", CJK) are ordinary input from the
+# free-text create dialog and must not crash with a low-level ValueError.
+# ---------------------------------------------------------------------------
+
+
+class TestSlugify:
+    def test_accented_name_ascii_folds_and_round_trips(self, isolated_storage: Path) -> None:
+        state = documents.create("Café Proposal")
+        assert state.document_id == "cafe-proposal"
+        # Round-trips through the document-id–scoped tools.
+        assert documents.get(state.document_id).document_name == "Café Proposal"
+        documents.set_source(state.document_id, "= Héllo\nBodyText.")
+        result = documents.patch_source(state.document_id, "BodyText", "Replaced")
+        assert result.applied is True
+
+    def test_resume_accents_folded(self, isolated_storage: Path) -> None:
+        state = documents.create("Résumé")
+        assert state.document_id == "resume"
+        assert documents.get("resume").document_name == "Résumé"
+
+    def test_cjk_name_falls_back_to_document(self, isolated_storage: Path) -> None:
+        # CJK reduces to nothing under ASCII folding → "document" fallback.
+        state = documents.create("提案書")
+        assert state.document_id == "document"
+        assert documents.get("document").document_name == "提案書"
+
+    def test_all_symbol_name_falls_back(self, isolated_storage: Path) -> None:
+        state = documents.create("###")
+        assert state.document_id == "document"
+
+    def test_fallback_collisions_get_unique_suffix(self, isolated_storage: Path) -> None:
+        # Two name that both fold to "document" must not collide.
+        a = documents.create("提案書")
+        b = documents.create("企画書")
+        assert a.document_id == "document"
+        assert b.document_id == "document-2"
+
+
+# ---------------------------------------------------------------------------
 # Source read/write
 # ---------------------------------------------------------------------------
 
