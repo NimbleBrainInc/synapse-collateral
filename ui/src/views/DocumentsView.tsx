@@ -97,6 +97,7 @@ export function DocumentsView({
         error={previewError}
         hasSelection={!!selectedId}
         emptyHint="Select a document to preview"
+        exportDocumentId={selectedId}
       />
     </div>
   );
