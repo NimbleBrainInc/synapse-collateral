@@ -55,7 +55,6 @@ clean: clean-bundle ## Clean everything
 bump: ## Bump version (usage: make bump VERSION=0.2.0)
 	@if [ -z "$(VERSION)" ]; then echo "Usage: make bump VERSION=x.y.z"; exit 1; fi
 	@jq --arg v "$(VERSION)" '.version = $$v' manifest.json > manifest.tmp.json && mv manifest.tmp.json manifest.json
-	@jq --arg v "$(VERSION)" '.version = $$v' server.json > server.tmp.json && mv server.tmp.json server.json
 	@sed -i '' 's/^version = ".*"/version = "$(VERSION)"/' pyproject.toml
 	@sed -i '' 's/^__version__ = ".*"/__version__ = "$(VERSION)"/' src/mcp_collateral/__init__.py
 	@echo "Bumped to $(VERSION)"
