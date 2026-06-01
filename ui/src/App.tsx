@@ -6,9 +6,9 @@ import { injectResponsiveStyles } from "./styles/responsive";
 import { TopNav } from "./components/TopNav";
 import type { Tab } from "./components/TopNav";
 import { Dialog } from "./components/Dialog";
-import { SettingsPanel } from "./components/SettingsPanel";
 import { DocumentsView } from "./views/DocumentsView";
 import { TemplatesView } from "./views/TemplatesView";
+import { ComponentsView } from "./views/ComponentsView";
 import { AssetsView } from "./views/AssetsView";
 import { useDocuments } from "./hooks/useDocuments";
 import type { TemplateInfo } from "./hooks/useTemplates";
@@ -63,7 +63,6 @@ export function App() {
 
   const [selectedDocument, setSelectedDocument] = useState<string | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const [dialogType, setDialogType] = useState<DialogType>(null);
   const [dialogName, setDialogName] = useState("");
@@ -271,8 +270,6 @@ export function App() {
           setDialogName("");
           setDialogType("renameDoc");
         }}
-        settingsOpen={settingsOpen}
-        onToggleSettings={() => setSettingsOpen((prev) => !prev)}
       />
 
       {tab === "documents" && (
@@ -306,6 +303,7 @@ export function App() {
           previewError={hasSelection ? previewError : ""}
         />
       )}
+      {tab === "components" && <ComponentsView />}
       {tab === "assets" && (
         <AssetsView
           assets={assets}
@@ -314,8 +312,6 @@ export function App() {
           onRefresh={refreshAssets}
         />
       )}
-
-      <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
       {dialogType === "newDoc" && (
         <Dialog onClose={() => setDialogType(null)}>

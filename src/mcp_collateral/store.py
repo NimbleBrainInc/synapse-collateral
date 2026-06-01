@@ -129,6 +129,12 @@ def write_voice(content: str) -> Path:
     return path
 
 
+def clear_voice() -> None:
+    """Remove voice.md if it exists (no-op when absent)."""
+    path = BASE_DIR / "voice.md"
+    path.unlink(missing_ok=True)
+
+
 # ---------------------------------------------------------------------------
 # Assets
 # ---------------------------------------------------------------------------
@@ -146,7 +152,9 @@ def save_asset(filename: str, data: bytes) -> Path:
 def list_assets() -> list[str]:
     """Return sorted list of asset filenames."""
     _ensure_dirs()
-    return sorted(p.name for p in ASSETS_DIR.iterdir() if p.is_file() and not p.name.startswith("."))
+    return sorted(
+        p.name for p in ASSETS_DIR.iterdir() if p.is_file() and not p.name.startswith(".")
+    )
 
 
 def delete_asset(filename: str) -> None:

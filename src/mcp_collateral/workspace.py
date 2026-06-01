@@ -37,6 +37,11 @@ from .models import (
 _NEAREST_MATCH_THRESHOLD = 0.6
 _CONTEXT_RADIUS_LINES = 3
 
+# Self-imposed cap on the voice body — a prompt-budget guard so voice.md
+# stays small. Enforced here (set_voice raises; the settings UI disables
+# Save over the cap), not by anything downstream.
+MAX_VOICE_BYTES = 8 * 1024
+
 # Rendered artifacts are written here so tools can return resource_link
 # references instead of inlining base64 bytes in tool results.
 _EXPORT_TTL_SECONDS = 24 * 60 * 60
@@ -540,7 +545,19 @@ class Workspace:
         return store.read_voice()
 
     def set_voice(self, content: str) -> dict[str, str]:
-        """Write the brand voice document."""
+        """Write the brand voice document.
+
+        Empty content clears the file (post-condition: file does not exist).
+        Caps at 8 KiB UTF-8 — a self-imposed prompt-budget guard so the voice
+        body stays small. Enforced here, not by anything downstream.
+        """
+        encoded = content.encode("utf-8")
+        if len(encoded) > MAX_VOICE_BYTES:
+            msg = f"Voice exceeds {MAX_VOICE_BYTES} byte limit (got {len(encoded)} bytes)"
+            raise ValueError(msg)
+        if not content.strip():
+            store.clear_voice()
+            return {"status": "cleared"}
         path = store.write_voice(content)
         return {"status": "saved", "path": str(path)}
 
@@ -551,7 +568,12 @@ class Workspace:
         return store.read_components()
 
     def set_components(self, source: str) -> dict[str, str]:
-        """Write the reusable Typst components."""
+        """Write the reusable Typst components.
+
+        Intentionally uncapped (unlike set_voice): components are Typst source
+        a document imports, not text injected into the prompt, so a component
+        library can legitimately be large.
+        """
         path = store.write_components(source)
         return {"status": "saved", "path": str(path)}
 
