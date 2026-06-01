@@ -470,12 +470,16 @@ def _slugify(name: str) -> str:
     NFKD-normalize then drop non-ASCII (café→cafe, résumé→resume), lowercase,
     keep only ``[a-z0-9 -]``, collapse whitespace/underscores to hyphens. Names
     that reduce to nothing (CJK-only, all-symbol) fall back to "document".
+
+    Truncate to 64 chars *before* the final hyphen-strip: slicing a long slug
+    can land mid-separator and leave a trailing hyphen, which the validator
+    rejects. Strip after the cut so the result never ends in a hyphen.
     """
     slug = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
     slug = slug.lower().strip()
     slug = re.sub(r"[^a-z0-9\s-]", "", slug)
     slug = re.sub(r"[\s_]+", "-", slug)
-    return slug.strip("-")[:64] or "document"
+    return slug[:64].strip("-") or "document"
 
 
 def _claim_unique_slug(name: str) -> str:

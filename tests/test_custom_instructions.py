@@ -115,9 +115,7 @@ class TestByteCap:
         # On rejection, no partial write should land on disk.
         assert not _voice_path(collateral_root).exists()
 
-    def test_multibyte_utf8_counted_in_bytes_not_chars(
-        self, collateral_root: Path
-    ) -> None:
+    def test_multibyte_utf8_counted_in_bytes_not_chars(self, collateral_root: Path) -> None:
         """Each emoji is 4 bytes in UTF-8; a 2049-emoji body is 8196 bytes (>8192).
 
         Tests that we're enforcing the cap in *bytes*, not character count.

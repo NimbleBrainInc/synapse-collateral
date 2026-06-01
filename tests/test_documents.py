@@ -134,6 +134,18 @@ class TestSlugify:
         assert a.document_id == "document"
         assert b.document_id == "document-2"
 
+    def test_long_name_truncates_without_trailing_hyphen(self, isolated_storage: Path) -> None:
+        # 50 single-char words → the 64-char cut lands on a separator. The slug
+        # must be truncated *then* stripped, so it never ends in a hyphen (the
+        # validator rejects trailing hyphens).
+        name = "a " * 50  # "a a a ... a" → slug "a-a-...-a", cut at 64 hits a "-"
+        state = documents.create(name)
+        assert state.document_id == state.document_id.strip("-")
+        assert not state.document_id.endswith("-")
+        assert len(state.document_id) <= 64
+        # And it actually round-trips.
+        assert documents.get(state.document_id).document_name == name
+
 
 # ---------------------------------------------------------------------------
 # Source read/write
