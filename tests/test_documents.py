@@ -84,6 +84,23 @@ class TestLifecycle:
         assert info.name == "New Name"
         assert documents.get("old-name").document_name == "New Name"
 
+    def test_rename_preserves_pdf_cache(self, isolated_storage: Path) -> None:
+        # A rename must not bump source.typ past output.pdf — otherwise the
+        # mtime-keyed cache invalidates and the next preview recompiles for
+        # nothing. Populate the cache, rename, assert the cache survives.
+        documents.create("Cached Doc")
+        documents.render_pdf("cached-doc")  # writes output.pdf
+        doc_dir = isolated_storage / "documents" / "cached-doc"
+        src_before = (doc_dir / "source.typ").stat().st_mtime
+        pdf_before = (doc_dir / "output.pdf").read_bytes()
+
+        documents.save("cached-doc", name="Renamed Doc")
+
+        # source.typ untouched (same mtime) → cache stays fresh.
+        assert (doc_dir / "source.typ").stat().st_mtime == src_before
+        # The cached PDF is served byte-for-byte, no recompile.
+        assert documents.render_pdf("cached-doc") == pdf_before
+
     def test_delete_removes_from_disk(self, isolated_storage: Path) -> None:
         documents.create("Doomed")
         documents.delete("doomed")

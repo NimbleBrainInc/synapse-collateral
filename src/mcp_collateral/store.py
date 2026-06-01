@@ -392,6 +392,33 @@ def save_document(
     return meta
 
 
+def rename_document(document_id: str, name: str) -> DocumentMeta:
+    """Rename a document, touching only meta.json.
+
+    Deliberately does NOT rewrite source.typ: a rename leaves content
+    unchanged, and rewriting source.typ would bump its mtime past
+    output.pdf and force a needless recompile on the next preview (the
+    PDF cache keys off source.typ mtime). Returns the updated metadata.
+    """
+    doc_dir = _doc_dir(document_id)
+    if not doc_dir.exists():
+        msg = f"Document not found: {document_id}"
+        raise FileNotFoundError(msg)
+
+    with open(doc_dir / "meta.json") as f:
+        existing = DocumentMeta(**json.load(f))
+
+    meta = DocumentMeta(
+        id=existing.id,
+        name=name,
+        template_id=existing.template_id,
+        created=existing.created,
+        modified=_now(),
+    )
+    (doc_dir / "meta.json").write_text(json.dumps(meta.model_dump(), indent=2))
+    return meta
+
+
 def load_document(document_id: str) -> tuple[DocumentMeta, str]:
     """Load a document. Returns (meta, source)."""
     doc_dir = _doc_dir(document_id)

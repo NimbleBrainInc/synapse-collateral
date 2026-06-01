@@ -92,15 +92,14 @@ def get(document_id: str) -> DocumentState:
 
 
 def save(document_id: str, name: str | None = None) -> DocumentInfo:
-    """Persist (re-save) the document. Optionally rename. Returns DocumentInfo."""
-    meta, source = store.load_document(document_id)
-    saved = store.save_document(
-        document_id=document_id,
-        name=name or meta.name,
-        source=source,
-        template_id=meta.template_id,
-        created=meta.created,
-    )
+    """Persist (re-save) the document. Optionally rename. Returns DocumentInfo.
+
+    A rename only rewrites meta.json — it leaves source.typ (and thus the
+    compiled output.pdf cache) untouched, so renaming a document doesn't
+    trigger a needless recompile on the next preview.
+    """
+    meta, _source = store.load_document(document_id)
+    saved = store.rename_document(document_id, name or meta.name)
     return DocumentInfo(
         id=saved.id,
         name=saved.name,
