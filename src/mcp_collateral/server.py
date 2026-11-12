@@ -19,7 +19,6 @@ from fastmcp import FastMCP
 from fastmcp.resources import ResourceContent, ResourceResult
 from fastmcp.tools import ToolResult
 from mcp.types import Annotations, ResourceLink, TextContent
-from pydantic import AnyUrl
 
 from . import compiler, documents, store, workspace
 from . import templates as template_mod
@@ -608,7 +607,7 @@ def _render_pdf(pdf_bytes: bytes, summary_name: str) -> ToolResult:
     export_id, _ = store_export(pdf_bytes, "pdf")
     link = ResourceLink(
         type="resource_link",
-        uri=AnyUrl(f"collateral://exports/{export_id}.pdf"),
+        uri=f"collateral://exports/{export_id}.pdf",
         name=summary_name,
         mimeType="application/pdf",
         description=f"{summary_name} ({page_count} pages, {size // 1024 or 1}KB)",
