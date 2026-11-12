@@ -18,7 +18,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from .store import BASE_DIR, COMPILE_DIR, FONTS_DIR
+from . import store
 
 
 def _find_typst() -> str:
@@ -35,9 +35,9 @@ def _find_typst() -> str:
 
 def _clean_compile_dir() -> None:
     """Remove all files from the compile directory."""
-    if COMPILE_DIR.exists():
-        shutil.rmtree(COMPILE_DIR)
-    COMPILE_DIR.mkdir(parents=True, exist_ok=True)
+    if store.COMPILE_DIR.exists():
+        shutil.rmtree(store.COMPILE_DIR)
+    store.COMPILE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def compile_source(
@@ -55,19 +55,19 @@ def compile_source(
     try:
         _clean_compile_dir()
 
-        components_path = BASE_DIR / "components.typ"
+        components_path = store.BASE_DIR / "components.typ"
         if components_path.exists():
-            shutil.copy2(components_path, COMPILE_DIR / "components.typ")
+            shutil.copy2(components_path, store.COMPILE_DIR / "components.typ")
 
-        brand_dir = COMPILE_DIR / "brand"
+        brand_dir = store.COMPILE_DIR / "brand"
         brand_dir.mkdir(parents=True, exist_ok=True)
         if logo_data:
             for filename, data in logo_data.items():
                 (brand_dir / filename).write_bytes(data)
 
-        (COMPILE_DIR / "document.typ").write_text(source)
+        (store.COMPILE_DIR / "document.typ").write_text(source)
 
-        out_path = COMPILE_DIR / "output.pdf"
+        out_path = store.COMPILE_DIR / "output.pdf"
         _run_typst(
             typst_bin,
             "_compile/document.typ",
@@ -89,13 +89,13 @@ def _run_typst(
         typst_bin,
         "compile",
         "--root",
-        str(BASE_DIR),
+        str(store.BASE_DIR),
         "--font-path",
-        str(FONTS_DIR),
+        str(store.FONTS_DIR),
     ]
     if pages:
         cmd.extend(["--pages", pages])
-    cmd.extend([str(BASE_DIR / input_file), output])
+    cmd.extend([str(store.BASE_DIR / input_file), output])
 
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
     if result.returncode != 0:
