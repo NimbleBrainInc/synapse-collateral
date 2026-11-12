@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pymupdf
 import pytest
 
 from mcp_collateral import documents
@@ -128,6 +129,10 @@ class TestTextNotFound:
         assert "MISSING TEXT" not in _read_source(isolated_storage, "test")
 
     def test_close_typo_yields_nearest_match(self, isolated_storage: Path) -> None:
+        # The source references an image, so it must exist in this test's storage
+        # for set_source's compile to succeed.
+        pixmap = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 1, 1), False)
+        (isolated_storage / "assets" / "matt-headshot.jpg").write_bytes(pixmap.tobytes("jpg"))
         documents.create("Test")
         documents.set_source(
             "test",
