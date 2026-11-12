@@ -317,7 +317,7 @@ class TestSourceSha:
         return — so a future refactor that returns a hand-built result with
         constant content (reintroducing the bug) fails here.
         """
-        from fastmcp.tools.tool import default_serializer
+        from fastmcp.tools.base import default_serializer
 
         documents.create("Test")
         documents.set_source("test", "= A\n= B\n")
