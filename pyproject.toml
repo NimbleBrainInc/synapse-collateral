@@ -1,6 +1,6 @@
 [project]
 name = "mcp-collateral"
-version = "0.7.1"
+version = "0.8.0"
 description = "Collateral Studio — Typst-powered document generation"
 readme = "README.md"
 license = {text = "MIT"}
@@ -10,7 +10,7 @@ authors = [
 ]
 keywords = ["mcp", "typst", "pdf", "generation"]
 dependencies = [
-    "fastmcp>=4,<5",
+    "fastmcp>=4.0.0",
     "pydantic>=2.0.0",
     "pymupdf>=1.25.0",
 ]
@@ -40,4 +40,9 @@ dev = [
     "ty>=0.0.1a1",
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
+]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "error::mcp.MCPDeprecationWarning",
 ]

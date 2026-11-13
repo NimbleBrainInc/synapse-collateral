@@ -609,7 +609,7 @@ def _render_pdf(pdf_bytes: bytes, summary_name: str) -> ToolResult:
         type="resource_link",
         uri=f"collateral://exports/{export_id}.pdf",
         name=summary_name,
-        mimeType="application/pdf",
+        mime_type="application/pdf",
         description=f"{summary_name} ({page_count} pages, {size // 1024 or 1}KB)",
         annotations=_USER_ONLY,
     )
