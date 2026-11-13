@@ -377,7 +377,7 @@ class TestRenderingContracts:
         link = links[0]
         assert str(link.uri).startswith("collateral://exports/")
         assert str(link.uri).endswith(".pdf")
-        assert link.mimeType == "application/pdf"
+        assert link.mime_type == "application/pdf"
 
         for b in result.content:
             dumped = b.model_dump_json()
@@ -421,7 +421,7 @@ class TestRenderingContracts:
         assert len(links) == 1
         link = links[0]
         assert str(link.uri).startswith("collateral://exports/")
-        assert link.mimeType == "application/pdf"
+        assert link.mime_type == "application/pdf"
 
     async def test_export_pdf_returns_resource_link(self, mcp_client) -> None:
         create_result = await mcp_client.call_tool("create_document", {"name": "Export Doc"})
@@ -435,7 +435,7 @@ class TestRenderingContracts:
         link = links[0]
         assert str(link.uri).startswith("collateral://exports/")
         assert str(link.uri).endswith(".pdf")
-        assert link.mimeType == "application/pdf"
+        assert link.mime_type == "application/pdf"
 
         data = result.structured_content
         assert data is not None
@@ -463,7 +463,7 @@ class TestRenderingContracts:
         assert _result_byte_size(result) < 10_000
         links = [b for b in result.content if getattr(b, "type", None) == "resource_link"]
         assert len(links) == 1
-        assert links[0].mimeType == "application/pdf"
+        assert links[0].mime_type == "application/pdf"
 
     async def test_patch_source_batch_through_mcp_client(self, mcp_client) -> None:
         """End-to-end: batch edits applied through the MCP server return
